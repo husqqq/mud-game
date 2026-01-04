@@ -14,7 +14,7 @@ public class SaveLoadService {
         try {
             Files.createDirectories(Paths.get(SAVE_DIR));
         } catch (IOException e) {
-            ConsoleIO.println("警告：无法创建存档目录！");
+            // 警告：无法创建存档目录
         }
     }
     
@@ -23,15 +23,13 @@ public class SaveLoadService {
      */
     public boolean save(Player player) {
         try (ObjectOutputStream oos = new ObjectOutputStream(
-                new FileOutputStream(getSaveFilePath(player.getUsername())))) {
+                new FileOutputStream(getSaveFilePath(player.getSaveName())))) {
             
             // 使用序列化保存完整Player对象
             oos.writeObject(player);
-            
-            ConsoleIO.println("保存成功！");
+
             return true;
         } catch (IOException e) {
-            ConsoleIO.println("保存失败：" + e.getMessage());
             return false;
         }
     }
@@ -39,9 +37,9 @@ public class SaveLoadService {
     /**
      * 加载玩家数据
      */
-    public Player load(String username) {
+    public Player load(String saveName) {
         try (ObjectInputStream ois = new ObjectInputStream(
-                new FileInputStream(getSaveFilePath(username)))) {
+                new FileInputStream(getSaveFilePath(saveName)))) {
             
             // 使用反序列化加载完整Player对象
             Player player = (Player) ois.readObject();
@@ -58,10 +56,8 @@ public class SaveLoadService {
                 player.setRoundCount(0);
             }
             
-            ConsoleIO.println("加载成功！欢迎回来，" + player.getName() + "！");
             return player;
         } catch (IOException | ClassNotFoundException e) {
-            ConsoleIO.println("加载失败：" + e.getMessage());
             return null;
         }
     }
@@ -69,28 +65,60 @@ public class SaveLoadService {
     /**
      * 检查存档是否存在
      */
-    public boolean saveExists(String username) {
-        return Files.exists(Paths.get(getSaveFilePath(username)));
+    public boolean saveExists(String saveName) {
+        return Files.exists(Paths.get(getSaveFilePath(saveName)));
     }
     
     /**
      * 获取存档文件路径
      */
-    private String getSaveFilePath(String username) {
-        return SAVE_DIR + username + ".sav";
+    private String getSaveFilePath(String saveName) {
+        return SAVE_DIR + saveName + ".sav";
     }
     
     /**
-     * 删除存档
+     * 保存多玩家存档
      */
-    public boolean deleteSave(String username) {
-        try {
-            Files.deleteIfExists(Paths.get(getSaveFilePath(username)));
+    public boolean saveMultiPlayer(MultiPlayerSaveData saveData) {
+        try (ObjectOutputStream oos = new ObjectOutputStream(
+                new FileOutputStream(getSaveFilePath(saveData.getSaveName())))) {
+            
+            oos.writeObject(saveData);
             return true;
         } catch (IOException e) {
-            ConsoleIO.println("删除存档失败：" + e.getMessage());
             return false;
         }
     }
+    
+    /**
+     * 加载多玩家存档
+     */
+    public MultiPlayerSaveData loadMultiPlayer(String saveName) {
+        try (ObjectInputStream ois = new ObjectInputStream(
+                new FileInputStream(getSaveFilePath(saveName)))) {
+            
+            MultiPlayerSaveData saveData = (MultiPlayerSaveData) ois.readObject();
+            
+            // 确保所有玩家的数据正确
+            for (Player player : saveData.getPlayers()) {
+                player.getStats().recalcHpMax();
+                player.restoreFullHp();
+                player.recalcPower();
+                if (player.getRoundCount() < 0) {
+                    player.setRoundCount(0);
+                }
+            }
+            
+            return saveData;
+        } catch (IOException | ClassNotFoundException e) {
+            return null;
+        }
+    }
+    
+    /**
+     * 检查多玩家存档是否存在
+     */
+    public boolean multiPlayerSaveExists(String saveName) {
+        return saveExists(saveName);
+    }
 }
-

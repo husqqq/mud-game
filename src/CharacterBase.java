@@ -182,14 +182,16 @@ public abstract class CharacterBase implements Serializable {
      * 获取角色状态描述
      */
     public String getStatus() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(name).append("\n");
-        sb.append("生命: ").append(stats.getHpCurrent()).append("/").append(stats.getHpMax()).append("\n");
-        sb.append("攻击: ").append(calcAttack()).append("\n");
-        sb.append("防御: ").append(calcDefense()).append("\n");
-        sb.append("速度: ").append(calcSpeed()).append("\n");
-        sb.append("主要技能: ").append(mainSkill.getDisplayName()).append("\n");
-        return sb.toString();
+        return name + "\n" +
+                "生命: " + stats.getHpCurrent() + "/" + stats.getHpMax() + "\n" +
+                "攻击: " + calcAttack() + "\n" +
+                "防御: " + calcDefense() + "\n" +
+                "速度: " + calcSpeed() + "\n" +
+                "主要技能: " + mainSkill.getDisplayName() + "\n";
+    }
+
+    public void setMainSkill(Skill skill) {
+        this.mainSkill = skill;
     }
 }
 

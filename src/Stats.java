@@ -9,7 +9,7 @@ public class Stats implements Serializable {
     // 基础属性常量
     private static final int BASE_ATTRIBUTE_VALUE = 3;
     private static final int BASE_HP = 50;
-    private static final int HP_PER_CON = 10;
+    private static final int HP_PER_CON = 2;
     
     private int str; // 力量
     private int agi; // 敏捷
@@ -65,6 +65,71 @@ public class Stats implements Serializable {
      */
     public void restoreFullHp() {
         this.hpCurrent = hpMax;
+    }
+    
+    /**
+     * 根据对数增长恢复生命值（不练功的情况下）
+     * @return 实际恢复的血量
+     */
+    public int recoverHpByLogarithmic() {
+        if (hpCurrent >= hpMax) {
+            return 0; // 已经满血，不恢复
+        }
+        
+        // 计算损失的血量比例
+        double lostHpRatio = (double)(hpMax - hpCurrent) / hpMax;
+        
+        // 使用对数增长公式：恢复量 = 基础恢复 * log(1 + 损失比例 * 系数)
+        // 使用自然对数，系数用于调整恢复速度
+        double recoveryCoefficient = 5.0; // 调整恢复速度的系数
+        double logValue = Math.log(1 + lostHpRatio * recoveryCoefficient);
+        
+        // 基础恢复量（根据最大血量的一定比例）
+        int baseRecovery = Math.max(1, hpMax / 10); // 至少恢复1点，最多恢复最大血量的5%
+        
+        // 计算恢复量：基础恢复 * 对数因子
+        int recoveryAmount = (int)(baseRecovery * logValue);
+        
+        // 确保不超过最大血量
+        int actualRecovery = Math.min(recoveryAmount, hpMax - hpCurrent);
+        hpCurrent = Math.min(hpMax, hpCurrent + actualRecovery); // 确保不超过上限
+        
+        return actualRecovery;
+    }
+    
+    /**
+     * 练功时的血量恢复（有几率恢复更多）
+     * @return 实际恢复的血量
+     */
+    public int recoverHpFromTraining() {
+        if (hpCurrent >= hpMax) {
+            return 0; // 已经满血，不恢复
+        }
+        
+        // 先计算基础恢复量（不应用，只计算）
+        double lostHpRatio = (double)(hpMax - hpCurrent) / hpMax;
+        double recoveryCoefficient = 5.0;
+        double logValue = Math.log(1 + lostHpRatio * recoveryCoefficient);
+        int baseRecovery = Math.max(1, hpMax / 20);
+        int calculatedBaseRecovery = (int)(baseRecovery * logValue);
+        int actualBaseRecovery = Math.min(calculatedBaseRecovery, hpMax - hpCurrent);
+        
+        // 30%几率额外恢复（恢复量为基础恢复的1.5-2倍）
+        int totalRecovery = actualBaseRecovery;
+        if (RandomUtils.isSuccess(30)) {
+            double bonusMultiplier = 1.5 + Math.random() * 0.5; // 1.5-2.0倍
+            int bonusRecovery = (int)(actualBaseRecovery * bonusMultiplier);
+            
+            // 确保不超过最大血量
+            int maxBonusRecovery = hpMax - (hpCurrent + actualBaseRecovery);
+            int actualBonusRecovery = Math.min(bonusRecovery, maxBonusRecovery);
+            totalRecovery += actualBonusRecovery;
+        }
+        
+        // 应用恢复，确保不超过最大血量
+        hpCurrent = Math.min(hpMax, hpCurrent + totalRecovery);
+        
+        return totalRecovery;
     }
     
     /**

@@ -13,7 +13,7 @@ public class Player extends CharacterBase implements Serializable {
     private static final int POWER_SKILL_WEIGHT = 10;
     private static final int DOMINANCE_THRESHOLD = 1200;
     
-    private final String username;          // 用户名
+    private final String saveName;          // 存档名
     private final Map<SkillType, Skill> skills; // 所有技能
     private SkillType mainStyle;      // 当前主用流派
     private int power;                // 战力
@@ -23,16 +23,32 @@ public class Player extends CharacterBase implements Serializable {
     /**
      * 构造函数
      */
-    public Player(String name, String username, Stats stats) {
+    public Player(String name, String saveName, Stats stats) {
         super(name, stats, new Skill(SkillType.SWORD)); // 默认主技能为剑法
-        this.username = username;
+        this.saveName = saveName;
         this.skills = new HashMap<>();
         this.mainStyle = SkillType.SWORD;
         
-        // 初始化所有技能
-        for (SkillType type : SkillType.values()) {
-            skills.put(type, new Skill(type));
-        }
+        // 只初始化主流派技能，其他技能需要学习才能掌握
+        skills.put(mainStyle, new Skill(mainStyle));
+        
+        // 重新计算战力
+        recalcPower();
+        this.title = "初入江湖";
+        this.roundCount = 0; // 初始化回合数为0
+    }
+    
+    /**
+     * 带主流派的构造函数（用于创建新角色时指定主流派）
+     */
+    public Player(String name, String saveName, Stats stats, SkillType mainStyle) {
+        super(name, stats, new Skill(mainStyle));
+        this.saveName = saveName;
+        this.skills = new HashMap<>();
+        this.mainStyle = mainStyle;
+        
+        // 只初始化主流派技能，其他技能需要学习才能掌握
+        skills.put(mainStyle, new Skill(mainStyle));
         
         // 重新计算战力
         recalcPower();
@@ -52,9 +68,10 @@ public class Player extends CharacterBase implements Serializable {
     }
     
     public void recalcPower() {
-        int saberLevel = skills.get(SkillType.SABER).getLevel();
-        int swordLevel = skills.get(SkillType.SWORD).getLevel();
-        int fistLevel = skills.get(SkillType.FIST).getLevel();
+        // 只计算已掌握技能的等级
+        int saberLevel = hasSkill(SkillType.SABER) ? skills.get(SkillType.SABER).getLevel() : 0;
+        int swordLevel = hasSkill(SkillType.SWORD) ? skills.get(SkillType.SWORD).getLevel() : 0;
+        int fistLevel = hasSkill(SkillType.FIST) ? skills.get(SkillType.FIST).getLevel() : 0;
         
         this.power = calculatePower(
             stats.getStr(),
@@ -104,6 +121,49 @@ public class Player extends CharacterBase implements Serializable {
     }
     
     /**
+     * 检查技能是否已掌握
+     */
+    public boolean hasSkill(SkillType type) {
+        return skills.containsKey(type) && skills.get(type) != null;
+    }
+    
+    /**
+     * 学习新技能
+     */
+    public boolean learnSkill(SkillType type) {
+        if (hasSkill(type)) {
+            return false; // 已经掌握了
+        }
+        skills.put(type, new Skill(type));
+        recalcPower();
+        return true;
+    }
+    
+    /**
+     * 获取指定技能等级
+     */
+    public int getSkillLevel(SkillType type) {
+        Skill skill = skills.get(type);
+        return skill != null ? skill.getLevel() : 0;
+    }
+    
+    /**
+     * 在战斗中使用技能后增加经验
+     */
+    public void gainSkillExpFromBattle(SkillType type, int expGain) {
+        Skill skill = skills.get(type);
+        if (skill != null) {
+            boolean levelUp = skill.addExp(expGain);
+            if (type == mainStyle) {
+                this.mainSkill = skill;
+            }
+            recalcPower();
+            
+            // 技能升级消息由调用者处理，避免循环依赖
+        }
+    }
+    
+    /**
      * 增加属性点
      */
     public boolean addAttributePoint(String attributeName, int points) {
@@ -143,19 +203,6 @@ public class Player extends CharacterBase implements Serializable {
     }
     
     /**
-     * 提升技能等级
-     */
-    public boolean trainSkill(SkillType type, int expGain) {
-        Skill skill = skills.get(type);
-        boolean levelUp = skill.addExp(expGain);
-        if (type == mainStyle) {
-            this.mainSkill = skill;
-        }
-        recalcPower();
-        return levelUp;
-    }
-    
-    /**
      * 获取战斗奖励
      */
     public void gainBattleRewards(int powerBonus) {
@@ -171,20 +218,9 @@ public class Player extends CharacterBase implements Serializable {
         updateTitle();
     }
     
-    /**
-     * 检查是否达到称霸武林条件
-     */
-    private boolean isDominanceAchieved(int power) {
-        return power >= DOMINANCE_THRESHOLD;
-    }
-    
-    public boolean isDominant() {
-        return isDominanceAchieved(power);
-    }
-    
     // Getter方法
-    public String getUsername() {
-        return username;
+    public String getSaveName() {
+        return saveName;
     }
     
     public SkillType getMainStyle() {
@@ -236,13 +272,19 @@ public class Player extends CharacterBase implements Serializable {
         sb.append("  智力: ").append(stats.getIntel()).append("\n");
         sb.append("  幸运: ").append(stats.getLuk()).append("\n");
         sb.append("武学:\n");
-        for (Skill skill : skills.values()) {
-            String mainIndicator = (skill.getType() == mainStyle) ? " (主)" : "";
-            sb.append("  ").append(skill.getDisplayName())
-              .append(mainIndicator)
-              .append(" - 经验: ").append(skill.getExpProgress()).append("\n");
+        for (SkillType skillType : SkillType.values()) {
+            String mainIndicator = (skillType == mainStyle) ? " (主)" : "";
+            if (hasSkill(skillType)) {
+                Skill skill = getSkill(skillType);
+                sb.append("  ").append(skill.getDisplayName())
+                  .append(mainIndicator)
+                  .append(" - 经验: ").append(skill.getExpProgress()).append("\n");
+            } else {
+                sb.append("  ").append(skillType.getName())
+                  .append(mainIndicator)
+                  .append(" - 未掌握\n");
+            }
         }
         return sb.toString();
     }
 }
-

@@ -12,18 +12,36 @@ public class NpcFactory {
         int baseAttribute = calculateBaseAttribute(playerPower, difficulty);
         Stats npcStats = generateNpcStats(baseAttribute, difficulty);
         
-        // 随机选择NPC的技能类型
+        // 随机选择NPC的技能类型（主流派）
         SkillType npcSkillType = RandomUtils.getRandomElement(SkillType.values());
+        
+        // 根据难度计算主流派技能等级
+        int mainSkillLevel = calculateMainSkillLevel(difficulty, playerPower);
         
         // 生成NPC名称和称号
         String npcName = generateNpcName(npcSkillType);
         String npcTitle = generateNpcTitle(difficulty, npcSkillType);
         
-        // 创建并返回NPC
-
-        // NPC战力计算在构造函数中已完成
+        // 创建并返回NPC（NPC战力计算在构造函数中已完成）
+        return new Npc(npcName, difficulty, npcSkillType, npcStats, npcTitle, mainSkillLevel);
+    }
+    
+    /**
+     * 根据难度和玩家战力计算NPC主流派技能等级
+     */
+    private int calculateMainSkillLevel(Difficulty difficulty, int playerPower) {
+        // 基础等级根据难度决定
+        int baseLevel = switch (difficulty) {
+            case EASY -> 2;
+            case NORMAL -> 3;
+            case HARD -> 4;
+            case HELL -> 5;
+        };
         
-        return new Npc(npcName, difficulty, npcSkillType, npcStats, npcTitle);
+        // 根据玩家战力微调（玩家战力越高，NPC技能等级也稍微提高）
+        int powerAdjustment = Math.min(3, playerPower / 200); // 最多增加3级
+        
+        return baseLevel + powerAdjustment;
     }
     
     /**
@@ -106,25 +124,6 @@ public class NpcFactory {
         };
 
         return RandomUtils.getRandomElement(titles);
-    }
-    
-    /**
-     * 获取NPC的显示名称
-     */
-    public String getNpcDisplayName(Difficulty difficulty, String title, String name, SkillType skillType) {
-        return "【" + difficulty.getName() + "】" + title + "" + name + "（" + skillType.name() + "）";
-    }
-    
-    /**
-     * 获取NPC的描述
-     */
-    public String getNpcDescription(Difficulty difficulty) {
-        return switch (difficulty) {
-            case EASY -> "他看起来实力不强，应该是个好对付的对手。";
-            case NORMAL -> "他的气息看起来不弱……";
-            case HARD -> "此人身上散发着强大的气息，小心应对！";
-            case HELL -> "天啊！这股气息让人窒息，难道是传说中的高手？！";
-        };
     }
 }
 

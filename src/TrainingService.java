@@ -2,10 +2,22 @@ package main;// File: TrainingService.java
 
 import java.util.function.Supplier;
 
+import main.io.GameIO;
+
 /**
  * 练功服务类
  */
 public class TrainingService {
+    private final GameIO io;
+
+    public TrainingService(GameIO io) {
+        this.io = io;
+    }
+
+    // 为了向后兼容，默认使用ConsoleIO
+    public TrainingService() {
+        this(new main.ConsoleIO());
+    }
     // 练功相关常量
     private static final int BASE_TRAINING_SUCCESS_RATE = 70;
     private static final int INT_TRAINING_BONUS_PER_POINT = 2;
@@ -17,32 +29,25 @@ public class TrainingService {
      * @param roundConsumer 用于消耗回合数的回调（每次练功结束调用一次），返回false表示回合耗尽需要立即停止
      */
     public void train(Player player, Supplier<Boolean> roundConsumer) {
-        ConsoleIO.printTitle("后山竹林 · 练功");
+        io.printTitle("后山竹林 · 练功");
         
-        while (true) {
-            // 显示当前技能信息
-            showSkillInfo(player);
-            
-            // 选择要修炼的技能
-            SkillType selectedSkill = selectSkillToTrain(player);
-            if (selectedSkill == null) {
-                return; // 返回主菜单
-            }
-            
+        // 显示当前技能信息
+        showSkillInfo(player);
+        
+        // 选择要修炼的技能
+        SkillType selectedSkill = selectSkillToTrain(player);
+        if (selectedSkill == null) {
+            return; // 返回主菜单
+        }
+        
         // 进行一次练功
         performTraining(player, selectedSkill);
-            
-            // 每次练功结束都视为消耗一个回合
-            if (roundConsumer != null) {
-                boolean canContinue = roundConsumer.get();
-                if (!canContinue) {
-                    ConsoleIO.println("\n回合数已耗尽，无法继续练功。");
-                    return;
-                }
-            }
-            
-            // 检查是否继续
-            if (!ConsoleIO.confirm("是否继续练功？")) {
+        
+        // 每次练功结束都视为消耗一个回合
+        if (roundConsumer != null) {
+            boolean canContinue = roundConsumer.get();
+            if (!canContinue) {
+                io.println("\n回合数已耗尽，无法继续练功。");
                 return;
             }
         }
@@ -52,29 +57,51 @@ public class TrainingService {
      * 显示技能信息
      */
     private void showSkillInfo(Player player) {
-        ConsoleIO.println("\n当前主流派：" + player.getMainStyle().getName());
-        ConsoleIO.println("");
+        io.println("\n当前主流派：" + player.getMainStyle().getName());
+        io.println("");
     }
     
     /**
      * 选择要修炼的技能
      */
     private SkillType selectSkillToTrain(Player player) {
-        int choice = ConsoleIO.readChoice(4, "选择要修炼的武学：\n1. 刀法\n2. 剑法\n3. 拳法\n4. 返回");
-
-        return switch (choice) {
-            case 1 -> SkillType.SABER;
-            case 2 -> SkillType.SWORD;
-            case 3 -> SkillType.FIST;
-            case 4 -> null; // 返回
-            default -> null;
-        };
+        StringBuilder prompt = new StringBuilder("选择要修炼的武学：\n");
+        int optionNumber = 1;
+        java.util.List<SkillType> skillOptions = new java.util.ArrayList<>();
+        
+        for (SkillType skillType : SkillType.values()) {
+            String status = player.hasSkill(skillType) ? " (已掌握)" : " (未掌握，可学习)";
+            prompt.append(optionNumber).append(". ").append(skillType.getName()).append(status).append("\n");
+            skillOptions.add(skillType);
+            optionNumber++;
+        }
+        prompt.append(optionNumber).append(". 返回");
+        
+        int choice = io.readChoice(optionNumber, prompt.toString());
+        
+        if (choice == optionNumber) {
+            return null; // 返回
+        }
+        
+        if (choice > 0 && choice <= skillOptions.size()) {
+            return skillOptions.get(choice - 1);
+        }
+        
+        return null;
     }
     
     /**
      * 执行一次练功
      */
     private void performTraining(Player player, SkillType skillType) {
+        // 如果技能未掌握，先学习它
+        if (!player.hasSkill(skillType)) {
+            player.learnSkill(skillType);
+            io.println("\n你开始学习" + skillType.getName() + "，初步掌握了基础招式！");
+            io.println("现在可以继续修炼提升熟练度。");
+            io.waitForEnter();
+        }
+        
         // 显示练功描述
         showTrainingDescription(skillType);
         
@@ -86,27 +113,42 @@ public class TrainingService {
         
         // 根据结果处理
         if (success) {
-            // 随机提升属性
-            int attributePoint = RandomUtils.getRandomInt(1, 5);
+            // 随机提升属性（1-2点，与简单难度NPC战斗奖励相同）
+            // 简单难度NPC战斗奖励：1-2点属性，所以练功最多也只能获得2点
+            int attributePoint = RandomUtils.getRandomInt(1, 2);
             if (isMainStyle) {
-                attributePoint = (int) Math.ceil(attributePoint * 1.2);
+                // 主流派有20%加成，但不超过2点上限
+                attributePoint = Math.min(2, (int) Math.ceil(attributePoint * 1.2));
             }
             player.getStats().addRandomAttribute(attributePoint);
             player.recalcPower();
-            ConsoleIO.println("\n练功结果：成功！获得" + attributePoint + "点属性点！");
+            io.println("\n练功结果：成功！获得" + attributePoint + "点属性点！");
             
             // 30%几率提升生命值上限（通过增加体质）
             if (RandomUtils.isSuccess((int) (HP_INCREASE_CHANCE * 100))) {
                 player.getStats().addCon(1);
-                ConsoleIO.println("身体得到锻炼，体质增强，生命值上限提升了！");
+                io.println("身体得到锻炼，体质增强，生命值上限提升了！");
+            }
+            
+            // 练功时有几率恢复更多血量
+            int recoveredHp = player.getStats().recoverHpFromTraining();
+            if (recoveredHp > 0) {
+                io.println("练功过程中，你的生命值恢复了 " + recoveredHp + " 点。");
+                io.println("当前生命值: " + player.getStats().getHpCurrent() + "/" + player.getStats().getHpMax());
             }
 
         } else {
             int penaltyPoints = RandomUtils.getRandomInt(5, 10);
             player.getStats().addRandomAttribute(-penaltyPoints);
             player.recalcPower();
-            ConsoleIO.println("\n练功结果：失败！今天似乎不在状态...");
-            ConsoleIO.println("练功受挫，损失了" + penaltyPoints + "点属性...");
+            io.println("\n练功结果：失败！今天似乎不在状态...");
+            io.println("练功受挫，损失了" + penaltyPoints + "点属性...");
+            
+            // 即使练功失败，也有基础的血量恢复（对数增长）
+            int recoveredHp = player.getStats().recoverHpByLogarithmic();
+            if (recoveredHp > 0) {
+                io.println("虽然练功失败，但休息让你恢复了 " + recoveredHp + " 点生命值。");
+            }
         }
     }
     
@@ -116,13 +158,13 @@ public class TrainingService {
     private void showTrainingDescription(SkillType skillType) {
         switch (skillType) {
             case SABER:
-                ConsoleIO.println("你抽出腰间佩刀，开始练习刀法招式...");
+                io.println("你抽出腰间佩刀，开始练习刀法招式...");
                 break;
             case SWORD:
-                ConsoleIO.println("你开始默念剑谱，闭目挥剑...");
+                io.println("你开始默念剑谱，闭目挥剑...");
                 break;
             case FIST:
-                ConsoleIO.println("你扎稳马步，一拳一式地练习拳法...");
+                io.println("你扎稳马步，一拳一式地练习拳法...");
                 break;
         }
     }
@@ -143,30 +185,6 @@ public class TrainingService {
         
         // 确保成功率在40%-95%之间
         return Math.max(30, Math.min(95, successRate));
-    }
-    
-    /**
-     * 扫荡练功
-     */
-    public void sweepTrain(Player player, SkillType skillType, int rounds, Supplier<Boolean> roundConsumer) {
-        if (rounds <= 0) {
-            ConsoleIO.println("扫荡回合数必须大于0。");
-            return;
-        }
-        ConsoleIO.printTitle("一键扫荡 · " + skillType.getName());
-        for (int i = 1; i <= rounds; i++) {
-            ConsoleIO.println("\n--- 第 " + i + " 次练功 ---");
-            performTraining(player, skillType);
-            
-            if (roundConsumer != null) {
-                boolean canContinue = roundConsumer.get();
-                if (!canContinue) {
-                    ConsoleIO.println("\n回合不足，扫荡提前结束。");
-                    break;
-                }
-            }
-        }
-        ConsoleIO.println("\n扫荡结束。");
     }
     
 }

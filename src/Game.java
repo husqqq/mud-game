@@ -1,31 +1,27 @@
-package main;// File: Game.java
+package main;
+
+import java.util.Scanner;
 
 /**
- * 游戏主控制类
- * 负责整体游戏流程的控制
+ * 单人游戏主控制类
  */
 public class Game {
-    // 称霸武林门槛战力
-    private static final int DOMINANCE_THRESHOLD = 1200;
-    // 最大回合数限制
-    private static final int MAX_ROUNDS = 100;
-    
-    private Player currentPlayer;
-    private final LoginService loginService;
+    private final ConsoleIO consoleIO;
+    private final SaveLoadService saveLoadService;
     private final TrainingService trainingService;
     private final BattleService battleService;
+    private final PvPBattleService pvpBattleService;
     private final NpcFactory npcFactory;
-    private final SaveLoadService saveLoadService;
-    private final ConsoleIO consoleIO;
+    private Player player;
     private boolean isRunning;
 
     public Game() {
         this.consoleIO = new ConsoleIO();
         this.saveLoadService = new SaveLoadService();
-        this.loginService = new LoginService(saveLoadService);
-        this.trainingService = new TrainingService();
-        this.battleService = new BattleService();
+        this.trainingService = new TrainingService(consoleIO);
+        this.battleService = new BattleService(consoleIO);
         this.npcFactory = new NpcFactory();
+        this.pvpBattleService = new PvPBattleService(new MultiPlayerManager(100), consoleIO);
         this.isRunning = true;
     }
 
@@ -34,279 +30,296 @@ public class Game {
      */
     public void start() {
         consoleIO.printWelcomeMessage();
-        
-        // 登录或注册
-        currentPlayer = loginService.loginOrRegister();
-        if (currentPlayer == null) {
-            consoleIO.printErrorMessage("登录失败，游戏退出。");
+
+        // 创建或加载角色
+        player = createOrLoadPlayer();
+
+        if (player == null) {
+            consoleIO.printErrorMessage("角色创建失败，游戏退出。");
             return;
         }
-        
-        consoleIO.printMessage("欢迎回来，" + currentPlayer.getName() + "！");
-        
-        // 如果是新角色，回合数应该已经是0；如果是加载的存档，确保回合数已正确加载
-        // 显示回合数信息
-        consoleIO.printMessage("当前回合数: " + currentPlayer.getRoundCount() + "/" + MAX_ROUNDS);
-        consoleIO.printMessage("目标：在" + MAX_ROUNDS + "回合内达到战力" + DOMINANCE_THRESHOLD);
-        
+
+        consoleIO.printMessage("欢迎来到武侠世界，" + player.getName() + "！");
+        consoleIO.printMessage("游戏目标：通过不断修炼和战斗，提升战力，最终成为武林至尊！");
+        consoleIO.printMessage("注意：游戏没有固定的胜利条件，你可以无限进行下去。");
+        consoleIO.waitForEnter();
+
         // 进入主循环
         mainLoop();
     }
 
     /**
-     * 游戏主循环
+     * 创建或加载角色
      */
-    public void mainLoop() {
-        while (isRunning) {
-            // 显示当前回合数
-            consoleIO.printMessage("\n===== 当前回合数: " + currentPlayer.getRoundCount() + "/" + MAX_ROUNDS + " =====");
-            
-            // 检查是否已经称霸武林
-            if (currentPlayer.getPower() >= DOMINANCE_THRESHOLD) {
-                consoleIO.printMessage("你已称霸武林，现在只能选择退出游戏！");
-                consoleIO.printMessage("1. 保存并退出");
-                consoleIO.printMessage("2. 直接退出");
-                int choice = consoleIO.readIntInput("请选择操作: ", 1, 2);
-                
-                switch (choice) {
-                    case 1:
-                        saveAndExit();
-                        break;
-                    case 2:
-                        exitWithoutSaving();
-                        break;
-                    default:
-                        consoleIO.printErrorMessage("无效的选择，请重新输入。");
-                }
-            } else {
-                consoleIO.printMainMenu();
-                int choice = consoleIO.readIntInput("请选择操作: ", 1, 6);
-                
-                switch (choice) {
-                    case 1:
-                        showStatus();
-                        // 查看状态不算回合
-                        break;
-                    case 2:
-                        goTraining();
-                        break;
-                    case 3:
-                        goBattle();
-                        // 战斗算一个回合
-                        currentPlayer.incrementRound();
-                        // 立即检查是否超过回合限制
-                        if (checkRoundLimit()) {
-                            break; // 如果已经失败，跳出循环
-                        }
-                        break;
-                    case 4:
-                        goTrainingSweep();
-                        break;
-                    case 5:
-                        saveAndExit();
-                        break;
-                    case 6:
-                        exitWithoutSaving();
-                        break;
-                    default:
-                        consoleIO.printErrorMessage("无效的选择，请重新输入。");
-                }
-            }
-            
-            // 每次操作后检查是否称霸武林（只有在未超过回合限制时）
-            if (isRunning) {
-                checkDominance();
+    private Player createOrLoadPlayer() {
+        consoleIO.printTitle("角色选择");
+
+        while (true) {
+            consoleIO.println("请选择：");
+            consoleIO.println("1. 创建新角色");
+            consoleIO.println("2. 加载已有角色");
+            consoleIO.println("3. 退出游戏");
+
+            int choice = consoleIO.readChoice(3, "请选择 (1-3): ");
+
+            switch (choice) {
+                case 1:
+                    return createNewPlayer();
+                case 2:
+                    Player loadedPlayer = loadPlayer();
+                    if (loadedPlayer != null) {
+                        return loadedPlayer;
+                    }
+                    consoleIO.println("加载失败，请重试。");
+                    break;
+                case 3:
+                    return null;
+                default:
+                    consoleIO.printErrorMessage("无效选择");
             }
         }
     }
 
     /**
-     * 显示玩家状态
+     * 创建新角色
      */
-    public void showStatus() {
-        consoleIO.printPlayerStatus(currentPlayer);
-        consoleIO.pressEnterToContinue();
+    private Player createNewPlayer() {
+        consoleIO.printTitle("创建新角色");
+
+        // 输入角色名
+        consoleIO.println("请输入角色名：");
+        String name = consoleIO.readLine().trim();
+        if (name.isEmpty()) {
+            name = "侠客";
+        }
+
+        // 分配属性点
+        consoleIO.println("\n你有5点属性可以自由分配，每项基础为10点。");
+        consoleIO.println("属性包括：力量(STR)、敏捷(AGI)、体质(CON)、智力(INT)、运气(LUK)");
+
+        Stats stats = allocateAttributes();
+
+        // 选择主用流派
+        consoleIO.println("\n请选择主用流派：");
+        consoleIO.println("1. 刀法 (SABER)");
+        consoleIO.println("2. 剑法 (SWORD)");
+        consoleIO.println("3. 拳法 (FIST)");
+
+        int choice = consoleIO.readChoice(3, "请选择 (1-3): ");
+        SkillType mainStyle = SkillType.values()[choice - 1];
+
+        // 创建玩家
+        Player newPlayer = new Player(name, "SINGLE_" + name, stats, mainStyle);
+
+        consoleIO.println("\n角色创建成功！");
+        consoleIO.println("角色名：" + newPlayer.getName());
+        consoleIO.println("主用流派：" + mainStyle.getName());
+        consoleIO.println("初始战力：" + newPlayer.getPower());
+        consoleIO.waitForEnter();
+
+        return newPlayer;
+    }
+
+    /**
+     * 加载角色
+     */
+    private Player loadPlayer() {
+        consoleIO.println("请输入存档名：");
+        String saveName = consoleIO.readLine().trim();
+
+        if (saveName.isEmpty()) {
+            return null;
+        }
+
+        return saveLoadService.load(saveName);
+    }
+
+    /**
+     * 分配属性点
+     */
+    private Stats allocateAttributes() {
+        int baseValue = 10;
+        int totalPoints = 5;
+        int remainingPoints = totalPoints;
+
+        int str = baseValue;
+        int agi = baseValue;
+        int con = baseValue;
+        int intel = baseValue;
+        int luk = baseValue;
+
+        consoleIO.println("当前属性状态：");
+        showAttributeStatus(str, agi, con, intel, luk, remainingPoints);
+
+        while (remainingPoints > 0) {
+            consoleIO.println("\n请输入要加点的属性名 (str/agi/con/int/luk)：");
+            String input = consoleIO.readLine().toLowerCase().trim();
+
+            if (input.equals("done")) {
+                consoleIO.println("还有 " + remainingPoints + " 点属性未分配，请先分配完所有属性点！");
+                continue;
+            }
+
+            consoleIO.println("要增加多少点？(1-" + remainingPoints + ")");
+            int pointsToAdd = consoleIO.readIntInput("请输入: ", 1, remainingPoints);
+
+            switch (input) {
+                case "str":
+                    str += pointsToAdd;
+                    break;
+                case "agi":
+                    agi += pointsToAdd;
+                    break;
+                case "con":
+                    con += pointsToAdd;
+                    break;
+                case "int":
+                case "intel":
+                    intel += pointsToAdd;
+                    break;
+                case "luk":
+                    luk += pointsToAdd;
+                    break;
+                default:
+                    consoleIO.println("无效的属性名，请输入 str/agi/con/int/luk 之一。");
+                    continue;
+            }
+
+            remainingPoints -= pointsToAdd;
+            showAttributeStatus(str, agi, con, intel, luk, remainingPoints);
+        }
+
+        return new Stats(str, agi, con, intel, luk);
+    }
+
+    /**
+     * 显示属性状态
+     */
+    private void showAttributeStatus(int str, int agi, int con, int intel, int luk, int remaining) {
+        consoleIO.println("STR = " + str + " (力量)");
+        consoleIO.println("AGI = " + agi + " (敏捷)");
+        consoleIO.println("CON = " + con + " (体质)");
+        consoleIO.println("INT = " + intel + " (智力)");
+        consoleIO.println("LUK = " + luk + " (运气)");
+        consoleIO.println("剩余分配点数：" + remaining);
+    }
+
+    /**
+     * 游戏主循环
+     */
+    private void mainLoop() {
+        while (isRunning && player.getStats().isAlive()) {
+            consoleIO.printMainMenu();
+            int choice = consoleIO.readChoice(6, "请选择操作 (1-6): ");
+
+            switch (choice) {
+                case 1:
+                    showStatus();
+                    break;
+                case 2:
+                    goTraining();
+                    break;
+                case 3:
+                    goBattle();
+                    break;
+                case 4:
+                    goPvPBattle();
+                    break;
+                case 5:
+                    saveAndExit();
+                    return;
+                case 6:
+                    exitGame();
+                    return;
+                default:
+                    consoleIO.printErrorMessage("无效的选择");
+            }
+        }
+
+        if (!player.getStats().isAlive()) {
+            consoleIO.println("\n" + player.getName() + " 已经死亡，游戏结束！");
+        }
+    }
+
+    /**
+     * 显示角色状态
+     */
+    private void showStatus() {
+        consoleIO.printPlayerStatus(player);
+        consoleIO.waitForEnter();
     }
 
     /**
      * 去后山练功
      */
-    public void goTraining() {
-        trainingService.train(currentPlayer, this::consumeTrainingRound);
-    }
-    
-    /**
-     * 一键扫荡练功
-     */
-    public void goTrainingSweep() {
-        consoleIO.printMessage("\n===== 一键扫荡练功 =====");
-        SkillType selectedSkill = promptSkillSelection();
-        if (selectedSkill == null) {
-            return;
-        }
-        
-        int remainingRounds = MAX_ROUNDS - currentPlayer.getRoundCount();
-        if (remainingRounds <= 0) {
-            consoleIO.printErrorMessage("没有剩余回合，无法继续练功。");
-            return;
-        }
-        
-        int sweepRounds = consoleIO.readIntInput("请输入扫荡的回合数 (1-" + remainingRounds + "): ", 1, remainingRounds);
-        trainingService.sweepTrain(currentPlayer, selectedSkill, sweepRounds, this::consumeTrainingRound);
-    }
-    
-    private SkillType promptSkillSelection() {
-        consoleIO.printMessage("请选择要修炼的武学：");
-        consoleIO.printMessage("1. 刀法");
-        consoleIO.printMessage("2. 剑法");
-        consoleIO.printMessage("3. 拳法");
-        consoleIO.printMessage("4. 返回");
-        
-        int choice = consoleIO.readIntInput("请输入选择: ", 1, 4);
-        return switch (choice) {
-            case 1 -> SkillType.SABER;
-            case 2 -> SkillType.SWORD;
-            case 3 -> SkillType.FIST;
-            default -> null;
-        };
+    private void goTraining() {
+        trainingService.train(player, () -> {
+            player.incrementRound();
+            return true;
+        });
+        consoleIO.println(player.getName() + " 完成了练功。");
+        consoleIO.waitForEnter();
     }
 
     /**
-     * 下山找人切磋（战斗）
+     * 找人切磋（NPC战斗）
      */
-    public void goBattle() {
+    private void goBattle() {
         consoleIO.printBattleDifficultyMenu();
-        int choice = consoleIO.readIntInput("请选择难度: ", 1, 5);
-        
+        int choice = consoleIO.readChoice(5, "请选择难度 (1-5): ");
+
         if (choice == 5) {
             return;
         }
-        
+
         Difficulty difficulty = Difficulty.values()[choice - 1];
-        consoleIO.printMessage("\n===== 下山找人切磋 =====");
-        consoleIO.printMessage("你选择了" + difficulty.getDisplayName() + "难度...");
-        
-        // 询问是否启用自动战斗
-        boolean autoBattle = consoleIO.confirmAction("是否启用自动战斗模式？(y/n): ");
-        battleService.setAutoBattle(autoBattle);
-        
+        consoleIO.println("\n你选择了" + difficulty.getDisplayName() + "难度...");
+
         // 创建NPC
-        Npc npc = npcFactory.createNpc(difficulty, currentPlayer.getPower());
-        consoleIO.printMessage("\n" + npc.getDisplayName());
-        consoleIO.printMessage(npc.getDescription());
-        
-        if (!autoBattle) {
-            consoleIO.pressEnterToContinue();
-        }
-        
+        Npc npc = npcFactory.createNpc(difficulty, player.getPower());
+        consoleIO.println("\n" + npc.getDisplayName());
+        consoleIO.println(npc.getDescription());
+        consoleIO.waitForEnter();
+
         // 进行战斗
-        BattleResult result = battleService.fight(currentPlayer, npc);
-        
+        BattleResult result = battleService.fight(player, npc);
+
         if (result == BattleResult.WIN) {
-            consoleIO.printMessage("\n战斗结束！你获胜了！");
-            
-            // 战斗奖励已经在BattleService中处理过了
-            consoleIO.printMessage("战斗奖励已获得！");
+            consoleIO.println("\n战斗胜利！" + player.getName() + " 获得了一些经验。");
         } else {
-            consoleIO.printMessage("\n战斗结束！你失败了...");
+            consoleIO.println("\n战斗失败..." + player.getName() + " 损失了一些属性。");
         }
-        
-        if (!autoBattle) {
-            consoleIO.pressEnterToContinue();
-        }
+
+        player.incrementRound();
+        consoleIO.println(player.getName() + " 完成了战斗。");
+        consoleIO.waitForEnter();
+    }
+
+    /**
+     * PvP战斗（单人模式下的模拟）
+     */
+    private void goPvPBattle() {
+        consoleIO.println("单人模式下不支持玩家对战，请选择其他模式进行多人游戏。");
+        consoleIO.waitForEnter();
     }
 
     /**
      * 保存并退出
      */
-    public void saveAndExit() {
+    private void saveAndExit() {
         try {
-            saveLoadService.save(currentPlayer);
-            consoleIO.printSuccessMessage("游戏已保存！");
-            isRunning = false;
-            consoleIO.printMessage("感谢游玩，再见！");
+            saveLoadService.save(player);
+            consoleIO.println("角色已保存！");
         } catch (Exception e) {
             consoleIO.printErrorMessage("保存失败：" + e.getMessage());
         }
+        consoleIO.println("感谢游玩，再见！");
     }
 
     /**
-     * 直接退出（不保存）
+     * 退出游戏
      */
-    public void exitWithoutSaving() {
-        if (consoleIO.confirmAction("确定要直接退出吗？进度将不会保存！(y/n): ")) {
-            isRunning = false;
-            consoleIO.printMessage("感谢游玩，再见！");
-        }
-    }
-
-    /**
-     * 检查回合数限制
-     * @return true 如果游戏已结束（超过回合限制），false 如果游戏继续
-     */
-    public boolean checkRoundLimit() {
-        if (currentPlayer.getRoundCount() > MAX_ROUNDS && isRunning) {
-            consoleIO.printMessage("\n====================================");
-            consoleIO.printMessage("回合数已超过限制！");
-            consoleIO.printMessage("当前回合数：" + currentPlayer.getRoundCount() + "（超过" + MAX_ROUNDS + "回合限制）");
-            consoleIO.printMessage("当前战力：" + currentPlayer.getPower());
-            consoleIO.printMessage("目标战力：" + DOMINANCE_THRESHOLD);
-            
-            // 超过回合数就算失败，即使已经达到目标战力
-            consoleIO.printMessage("很遗憾，你未能在" + MAX_ROUNDS + "回合内达到目标战力。");
-            consoleIO.printMessage("—— 【挑战失败】结局达成 —— 游戏结束。");
-            
-            // 自动保存最终状态
-            try {
-                saveLoadService.save(currentPlayer);
-                consoleIO.printSuccessMessage("最终状态已自动保存。");
-            } catch (Exception e) {
-                // 不显示保存失败信息，避免破坏结局体验
-            }
-            
-            isRunning = false;
-            return true; // 返回true表示游戏已结束
-        }
-        return false; // 返回false表示游戏继续
-    }
-    
-    /**
-     * 检查是否称霸武林（必须在100回合内达到）
-     */
-    public void checkDominance() {
-        // 只有在100回合内达到1200战力才算成功
-        if (currentPlayer.getPower() >= DOMINANCE_THRESHOLD && 
-            currentPlayer.getRoundCount() <= MAX_ROUNDS && 
-            isRunning) {
-            consoleIO.printMessage("\n====================================");
-            consoleIO.printMessage("当前战力：" + currentPlayer.getPower());
-            consoleIO.printMessage("当前回合数：" + currentPlayer.getRoundCount() + "/" + MAX_ROUNDS);
-            consoleIO.printMessage("恭喜！你在" + MAX_ROUNDS + "回合内达到了目标战力！");
-            consoleIO.printMessage("你的名号已经响彻整个江湖，武林中人无不闻风丧胆！");
-            consoleIO.printMessage("—— 【称霸武林】结局达成 —— 游戏结束。");
-            
-            // 自动保存最终状态
-            try {
-                saveLoadService.save(currentPlayer);
-                consoleIO.printSuccessMessage("最终状态已自动保存。");
-            } catch (Exception e) {
-                // 不显示保存失败信息，避免破坏结局体验
-            }
-            
-            isRunning = false;
-        }
-    }
-
-    /**
-     * 练功时消耗回合的回调
-     * @return true 表示可以继续练功，false 表示回合耗尽需要中断
-     */
-    private boolean consumeTrainingRound() {
-        if (!isRunning) {
-            return false;
-        }
-        currentPlayer.incrementRound();
-        // 如果超过回合限制将返回false，阻止继续练功
-        return !checkRoundLimit();
+    private void exitGame() {
+        consoleIO.println("感谢游玩，再见！");
     }
 }
