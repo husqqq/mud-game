@@ -9,6 +9,8 @@ import main.network.GameMessage;
 import main.network.MessageType;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Map;
@@ -20,7 +22,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class GameServer {
     private static final int DEFAULT_PORT = 8888;
+    private static final String DEFAULT_HOST = "0.0.0.0";  // 默认绑定所有网络接口
 
+    private String host;
     private int port;
     private int expectedPlayerCount;  // 期望的玩家数量
     private final UserAuthService authService;
@@ -32,7 +36,8 @@ public class GameServer {
     private ServerSocket serverSocket;
     private boolean running;
     
-    public GameServer(int port, int expectedPlayerCount) {
+    public GameServer(String host, int port, int expectedPlayerCount) {
+        this.host = host != null ? host : DEFAULT_HOST;
         this.port = port;
         this.expectedPlayerCount = expectedPlayerCount;
         this.authService = new UserAuthService();
@@ -43,19 +48,20 @@ public class GameServer {
         this.running = false;
     }
 
+    public GameServer(String host, int port) {
+        this(host, port, 2); // 默认2个玩家
+    }
+
+    public GameServer(int port, int expectedPlayerCount) {
+        this(DEFAULT_HOST, port, expectedPlayerCount);
+    }
+
     public GameServer(int port) {
-        this.port = port;
-        this.expectedPlayerCount = 2; // 默认2个玩家
-        this.authService = new UserAuthService();
-        this.saveLoadService = new SaveLoadService();
-        this.clientHandlers = new ConcurrentHashMap<>();
-        this.playerToUser = new ConcurrentHashMap<>();
-        this.playerIOs = new ConcurrentHashMap<>();
-        this.running = false;
+        this(DEFAULT_HOST, port);
     }
 
     public GameServer() {
-        this(DEFAULT_PORT);
+        this(DEFAULT_HOST, DEFAULT_PORT);
     }
 
     /**
@@ -89,7 +95,9 @@ public class GameServer {
      */
     private boolean isPortAvailable(int port) {
         try {
-            ServerSocket testSocket = new ServerSocket(port);
+            InetAddress bindAddress = InetAddress.getByName(host);
+            ServerSocket testSocket = new ServerSocket();
+            testSocket.bind(new InetSocketAddress(bindAddress, port));
             testSocket.close();
             return true;
         } catch (IOException e) {
@@ -109,15 +117,23 @@ public class GameServer {
                 this.port = actualPort;
             }
 
-            serverSocket = new ServerSocket(actualPort);
+            // 绑定到指定地址和端口
+            InetAddress bindAddress = InetAddress.getByName(host);
+            serverSocket = new ServerSocket();
+            serverSocket.bind(new InetSocketAddress(bindAddress, actualPort));
             running = true;
+            
+            // 获取实际绑定的地址（用于显示）
+            String displayHost = host.equals("0.0.0.0") ? "localhost" : host;
+            String actualHost = bindAddress.getHostAddress();
+            
             System.out.println("====================================");
             System.out.println("        武侠世界服务器已启动");
             System.out.println("====================================");
-            System.out.println("服务器地址: localhost (本机)");
+            System.out.println("服务器地址: " + displayHost + " (" + actualHost + ")");
             System.out.println("监听端口: " + actualPort);
             System.out.println("连接方式: 其他玩家选择'加入服务器'");
-            System.out.println("          输入地址: localhost, 端口: " + actualPort);
+            System.out.println("          输入地址: " + displayHost + ", 端口: " + actualPort);
             System.out.println("====================================");
             System.out.println("等待玩家连接...");
 
@@ -299,16 +315,21 @@ public class GameServer {
      * 主方法（用于测试）
      */
     public static void main(String[] args) {
+        String host = DEFAULT_HOST;
         int port = DEFAULT_PORT;
+        
         if (args.length > 0) {
+            host = args[0];
+        }
+        if (args.length > 1) {
             try {
-                port = Integer.parseInt(args[0]);
+                port = Integer.parseInt(args[1]);
             } catch (NumberFormatException e) {
                 System.err.println("无效的端口号，使用默认端口: " + DEFAULT_PORT);
             }
         }
         
-        GameServer server = new GameServer(port);
+        GameServer server = new GameServer(host, port);
         server.start();
     }
 }

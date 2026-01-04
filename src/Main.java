@@ -100,14 +100,41 @@ public class Main {
      */
     private static void startServerMode() {
         consoleIO.printTitle("创建服务器");
+        consoleIO.println("请输入服务器配置：");
+        consoleIO.println("");
+
+        // 输入服务器地址
+        consoleIO.print("服务器地址 (默认: 0.0.0.0，绑定所有网络接口): ");
+        String host = consoleIO.readLine().trim();
+        if (host.isEmpty()) {
+            host = "0.0.0.0";
+        }
+
+        // 输入端口
+        consoleIO.print("服务器端口 (默认: 8888): ");
+        String portStr = consoleIO.readLine().trim();
+        int port = 8888;
+        if (!portStr.isEmpty()) {
+            try {
+                port = Integer.parseInt(portStr);
+            } catch (NumberFormatException e) {
+                consoleIO.println("无效端口，使用默认端口 8888");
+            }
+        }
+
+        consoleIO.println("");
         consoleIO.println("正在启动服务器...");
-        consoleIO.println("默认端口: 8888 (如果被占用将自动选择其他端口)");
-        consoleIO.println("服务器将等待玩家连接...");
+        if (host.equals("0.0.0.0")) {
+            consoleIO.println("服务器将绑定所有网络接口");
+        } else {
+            consoleIO.println("服务器将绑定到: " + host);
+        }
+        consoleIO.println("端口: " + port + " (如果被占用将自动选择其他端口)");
         consoleIO.println("");
 
         try {
             // 启动服务器
-            main.server.GameServer.main(new String[]{});
+            main.server.GameServer.main(new String[]{host, String.valueOf(port)});
         } catch (Exception e) {
             consoleIO.printErrorMessage("服务器启动失败：" + e.getMessage());
             showMultiplayerMenu();
