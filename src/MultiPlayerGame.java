@@ -805,7 +805,7 @@ public class MultiPlayerGame {
         GameIO io = getPlayerIO(player.getName());
         playerManager.removeArenaParticipant(player.getName());
         
-        // 逃跑惩罚
+        // 逃跑惩罚：损失5-10点属性（比战败的2-4点重）
         int penaltyPoints = main.RandomUtils.getRandomInt(5, 10);
         player.getStats().addRandomAttribute(-penaltyPoints);
         player.recalcPower();
@@ -817,8 +817,8 @@ public class MultiPlayerGame {
         
         try {
             if (io != null && io.isConnected()) {
-                io.printMessage(player.getName() + " 选择了逃跑，退出决斗池。");
-                io.printMessage("逃跑惩罚：损失了" + penaltyPoints + "点属性");
+                io.printMessage("\n" + player.getName() + " 选择了逃跑，退出决斗池。");
+                io.printMessage("逃跑惩罚：损失了 " + penaltyPoints + " 点属性");
                 io.printMessage("请等待下一回合。");
             }
         } catch (Exception e) {
@@ -837,12 +837,19 @@ public class MultiPlayerGame {
     private void handlePlayerDefeat(Player player) {
         GameIO io = getPlayerIO(player.getName());
         
+        // 战败惩罚：损失2-4点属性（比逃跑的5-10点轻）
+        int penaltyPoints = main.RandomUtils.getRandomInt(2, 4);
+        player.getStats().addRandomAttribute(-penaltyPoints);
+        player.recalcPower();
+        
         // 战败保底恢复生命，确保能进入下一回合
         player.getStats().setHpCurrent(player.getStats().getHpMax() / 2);
         
         try {
             if (io != null && io.isConnected()) {
-                io.printMessage("\n你已被淘汰出局！请等待下一回合。");
+                io.printMessage("\n你已被淘汰出局！");
+                io.printMessage("战败惩罚：损失了 " + penaltyPoints + " 点属性");
+                io.printMessage("请等待下一回合。");
             }
         } catch (Exception e) {
             defaultIO.printErrorMessage("通知战败玩家 " + player.getName() + " 失败: " + e.getMessage());
