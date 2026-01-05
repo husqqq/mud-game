@@ -96,17 +96,22 @@ public class NetworkConsoleIO implements GameIO {
         clientHandler.sendMessage(new GameMessage(MessageType.REQUEST_INPUT, prompt));
         
         try {
-            String input = clientHandler.receiveInput(DEFAULT_TIMEOUT_MS);
-            if (input == null) {
-                // 初次等待超时，发送提示再给一次机会
-                handleTimeout();
-                input = clientHandler.receiveInput(WARNING_TIMEOUT_MS);
-                if (input == null) {
-                    markTimedOut();
-                    return "";
-                }
-            }
-            clearTimeout();
+            // 超时检测已暂时注释（用于调试），使用无限等待
+            String input = clientHandler.receiveInput(Long.MAX_VALUE);
+            
+            // 原超时检测逻辑（已注释）
+            // String input = clientHandler.receiveInput(DEFAULT_TIMEOUT_MS);
+            // if (input == null) {
+            //     // 初次等待超时，发送提示再给一次机会
+            //     handleTimeout();
+            //     input = clientHandler.receiveInput(WARNING_TIMEOUT_MS);
+            //     if (input == null) {
+            //         markTimedOut();
+            //         return "";
+            //     }
+            // }
+            // clearTimeout();
+            
             return input != null ? input.trim() : "";
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
