@@ -211,9 +211,9 @@ public abstract class CharacterBase implements Serializable {
             damageMultiplier = RandomUtils.getNormalDamageMultiplier(); // 普通伤害0.8-1.2倍
         }
         
-        // 检查技能克制关系（攻击者的技能克制防御者的技能）
+        // 检查技能克制关系（只在互相攻击时生效，即 defenderSkill 不为 null）
         double counterMultiplier = 1.0;
-        if (attackerSkill.counters(defenderSkill)) {
+        if (defenderSkill != null && attackerSkill.counters(defenderSkill)) {
             counterMultiplier = 1.3; // 克制时伤害提升30%
         }
         

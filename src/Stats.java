@@ -10,14 +10,13 @@ public class Stats implements Serializable {
     private static final int BASE_ATTRIBUTE_VALUE = 3;
     private static final int BASE_HP = 50;
     private static final int HP_PER_CON = 2;
-    private static final int DEF_PER_CON = 1; // 每点体质增加1点防御
     
     private int str; // 力量
     private int agi; // 敏捷
     private int con; // 体质
     private int intel; // 智力
     private int luk; // 幸运
-    private int def; // 防御值
+    private int def; // 防御值（独立属性，可分配）
     private int hpMax; // 最大生命值
     private int hpCurrent; // 当前生命值
     
@@ -30,23 +29,30 @@ public class Stats implements Serializable {
         this.con = BASE_ATTRIBUTE_VALUE;
         this.intel = BASE_ATTRIBUTE_VALUE;
         this.luk = BASE_ATTRIBUTE_VALUE;
+        this.def = BASE_ATTRIBUTE_VALUE;
         this.hpMax = calculateMaxHP(con);
         this.hpCurrent = hpMax;
-        this.def = calculateDef(con);
     }
     
     /**
-     * 构造函数
+     * 构造函数（6个属性）
      */
-    public Stats(int str, int agi, int con, int intel, int luk) {
+    public Stats(int str, int agi, int con, int intel, int luk, int def) {
         this.str = str;
         this.agi = agi;
         this.con = con;
         this.intel = intel;
         this.luk = luk;
+        this.def = def;
         this.hpMax = calculateMaxHP(con);
         this.hpCurrent = hpMax;
-        this.def = calculateDef(con);
+    }
+    
+    /**
+     * 构造函数（5个属性，兼容旧代码）
+     */
+    public Stats(int str, int agi, int con, int intel, int luk) {
+        this(str, agi, con, intel, luk, BASE_ATTRIBUTE_VALUE);
     }
     
     /**
@@ -56,23 +62,12 @@ public class Stats implements Serializable {
         return BASE_HP + con * HP_PER_CON;
     }
     
-    /**
-     * 计算防御值（基于体质）
-     */
-    private int calculateDef(int con) {
-        return con * DEF_PER_CON;
-    }
-    
     public void recalcHpMax() {
         this.hpMax = calculateMaxHP(con);
         // 如果当前生命值超过最大值，则重置为最大值
         if (hpCurrent > hpMax) {
             hpCurrent = hpMax;
         }
-    }
-    
-    public void recalcDef() {
-        this.def = calculateDef(con);
     }
     
     /**
@@ -194,13 +189,11 @@ public class Stats implements Serializable {
     public void setCon(int con) {
         this.con = con;
         recalcHpMax(); // 体质改变时重新计算最大生命值
-        recalcDef(); // 体质改变时重新计算防御值
     }
     
     public void addCon(int value) {
         this.con += value;
         recalcHpMax(); // 体质改变时重新计算最大生命值
-        recalcDef(); // 体质改变时重新计算防御值
     }
     
     public int getDef() {
@@ -209,6 +202,10 @@ public class Stats implements Serializable {
     
     public void setDef(int def) {
         this.def = def;
+    }
+    
+    public void addDef(int value) {
+        this.def += value;
     }
     
     public int getIntel() {
@@ -251,8 +248,8 @@ public class Stats implements Serializable {
      * 随机增加属性点（可以是负数，用于惩罚）
      */
     public void addRandomAttribute(int points) {
-        // 随机选择一个属性进行提升或减少
-        int attributeIndex = (int) (Math.random() * 5);
+        // 随机选择一个属性进行提升或减少（包括防御值）
+        int attributeIndex = (int) (Math.random() * 6);
         switch (attributeIndex) {
             case 0: 
                 str = Math.max(1, str + points); // 确保属性至少为1
@@ -263,7 +260,6 @@ public class Stats implements Serializable {
             case 2: 
                 con = Math.max(1, con + points);
                 recalcHpMax(); // 体质改变时需要重新计算生命值
-                recalcDef(); // 体质改变时需要重新计算防御值
                 break;
             case 3: 
                 intel = Math.max(1, intel + points);
@@ -271,11 +267,9 @@ public class Stats implements Serializable {
             case 4: 
                 luk = Math.max(1, luk + points);
                 break;
-        }
-        // 如果体质改变，已经在上面重新计算了，否则这里重新计算
-        if (attributeIndex != 2) {
-            recalcHpMax();
-            recalcDef();
+            case 5:
+                def = Math.max(1, def + points);
+                break;
         }
     }
     

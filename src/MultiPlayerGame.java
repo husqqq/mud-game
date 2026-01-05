@@ -484,305 +484,11 @@ public class MultiPlayerGame {
         
         // 使用新的并行战斗逻辑
         handleParallelArenaBattle();
-        
-        // 保存所有初始参与者（包括后来逃跑的）
-        List<Player> allInitialParticipants = new ArrayList<>(participants);
-        
-        // 向所有参与者广播决斗开始
-        for (Player participant : participants) {
-            GameIO io = getPlayerIO(participant.getName());
-            io.printMessage("\n===== 决斗池开始 =====");
-            io.printMessage("参加玩家：" + participants.size() + "人");
-            for (int i = 0; i < participants.size(); i++) {
-                Player p = participants.get(i);
-                String aiTag = playerManager.isAiControlled(p.getName()) ? " [AI托管]" : "";
-                io.printMessage((i + 1) + ". " + p.getName() + aiTag +
-                             " (战力: " + p.getPower() +
-                             ", HP: " + p.getStats().getHpCurrent() + "/" + p.getStats().getHpMax() + ")");
-            }
-        }
-        
-        // 进行多轮决斗，直到只剩一个玩家
-        while (participants.size() > 1 && isRunning) {
-            // 更新参与者列表（移除已死亡的玩家）
-            participants = playerManager.getArenaParticipants();
-            participants.removeIf(p -> !p.getStats().isAlive());
-            
-            if (participants.size() <= 1) {
-                break;
-            }
-            
-            // 每轮让每个玩家选择攻击目标
-            // 在循环开始前再次检查参与者数量（可能在上一轮有玩家逃跑）
-            participants = playerManager.getArenaParticipants();
-            participants.removeIf(p -> !p.getStats().isAlive());
-            if (participants.size() <= 1) {
-                break; // 只剩一个玩家，退出循环
-            }
-            
-            for (Player attacker : new ArrayList<>(participants)) {
-                // 再次检查参与者数量（可能在循环过程中有玩家逃跑或战败）
-                participants = playerManager.getArenaParticipants();
-                if (participants.size() <= 1) {
-                    break; // 只剩一个玩家，退出循环
-                }
-                
-                // 检查攻击者是否还在决斗池中且存活
-                if (!attacker.getStats().isAlive() || !participants.contains(attacker)) {
-                    continue;
-                }
-                
-                // 获取其他可攻击的玩家
-                List<Player> targets = new ArrayList<>(participants);
-                targets.remove(attacker);
-                targets.removeIf(p -> !p.getStats().isAlive());
-                
-                if (targets.isEmpty()) {
-                    break; // 没有可攻击的目标
-                }
-                
-                // 如果攻击者是AI接管的，自动选择目标（不获取IO，避免使用断开的IO）
-                if (playerManager.isAiControlled(attacker.getName())) {
-                    Player target = targets.get(new java.util.Random().nextInt(targets.size()));
-                    // AI托管玩家使用默认IO（不尝试使用断开的IO）
-                    boolean attackerDefeated = performArenaAttack(attacker, target, defaultIO);
-                    
-                    // 如果攻击者被打败，从参与者列表中移除（AI无需通知）
-                    if (attackerDefeated || !attacker.getStats().isAlive()) {
-                        playerManager.removeArenaParticipant(attacker.getName());
-                        synchronized (participantsLock) {
-                            participants.remove(attacker);
-                        }
-                        // 唤醒等待中的玩家线程（虽然AI无需通知，但可能有其他玩家在等待）
-                        synchronized (this) {
-                            this.notifyAll();
-                        }
-                    }
-                    continue; // 继续下一个玩家
-                }
-                
-                // 真人玩家，选择攻击目标
-                GameIO attackerIO = getPlayerIO(attacker.getName());
-                
-                // 检查连接状态
-                if (attackerIO == null || !attackerIO.isConnected() || attackerIO.isTimedOut()) {
-                    defaultIO.printMessage(attacker.getName() + " 连接已断开，标记为AI接管");
-                    playerManager.setAiControlled(attacker.getName(), true);
-                    // 使用AI选择目标（使用默认IO）
-                    Player target = targets.get(new java.util.Random().nextInt(targets.size()));
-                    boolean attackerDefeated = performArenaAttack(attacker, target, defaultIO);
-                    // 如果攻击者被打败，从参与者列表中移除
-                    if (attackerDefeated || !attacker.getStats().isAlive()) {
-                        playerManager.removeArenaParticipant(attacker.getName());
-                        synchronized (participantsLock) {
-                            participants.remove(attacker);
-                        }
-                        // 战败恢复
-                        attacker.getStats().setHpCurrent(attacker.getStats().getHpMax() / 2);
-                        // 唤醒等待中的玩家线程
-                        synchronized (this) {
-                            this.notifyAll();
-                        }
-                    }
-                    continue;
-                }
-                
-                // 真人玩家，正常处理
-                try {
-                        attackerIO.printMessage("\n" + attacker.getName() + " 请选择攻击目标：");
-                        for (int i = 0; i < targets.size(); i++) {
-                            Player target = targets.get(i);
-                            String aiTag = playerManager.isAiControlled(target.getName()) ? " [AI托管]" : "";
-                            attackerIO.printMessage((i + 1) + ". " + target.getName() + aiTag +
-                                         " (战力: " + target.getPower() +
-                                         ", HP: " + target.getStats().getHpCurrent() + "/" + target.getStats().getHpMax() + ")");
-                        }
-                        attackerIO.printMessage((targets.size() + 1) + ". 逃跑 (退出决斗池)");
-                        
-                        int choice = attackerIO.readIntInput("请选择 (1-" + (targets.size() + 1) + "): ", 1, targets.size() + 1);
-                        
-                        // 再次检查连接状态（可能在输入过程中断开）
-                        if (!attackerIO.isConnected() || attackerIO.isTimedOut()) {
-                            defaultIO.printMessage(attacker.getName() + " 连接已断开，标记为AI接管");
-                            playerManager.setAiControlled(attacker.getName(), true);
-                            // 使用AI选择目标（使用默认IO，避免使用断开的IO）
-                            Player target = targets.get(new java.util.Random().nextInt(targets.size()));
-                    boolean attackerDefeated = performArenaAttack(attacker, target, defaultIO);
-                    // 如果攻击者被打败，从参与者列表中移除
-                    if (attackerDefeated || !attacker.getStats().isAlive()) {
-                        playerManager.removeArenaParticipant(attacker.getName());
-                        synchronized (participantsLock) {
-                            participants.remove(attacker);
-                        }
-                        // 战败恢复生命值，确保能继续
-                        attacker.getStats().setHpCurrent(attacker.getStats().getHpMax() / 2);
-                        // 唤醒等待中的玩家线程
-                        synchronized (this) {
-                            this.notifyAll();
-                        }
-                    }
-                            continue;
-                        }
-                        
-                        if (choice == targets.size() + 1) {
-                            // 逃跑
-                            try {
-                                attackerIO.printMessage(attacker.getName() + " 选择了逃跑，退出决斗池。");
-                            } catch (Exception e) {
-                                // 发送消息失败，但继续处理
-                            }
-                            playerManager.removeArenaParticipant(attacker.getName());
-                            // participants 是局部变量，不需要同步
-                            participants.remove(attacker);
-                            // 逃跑惩罚
-                            int penaltyPoints = main.RandomUtils.getRandomInt(5, 10);
-                            attacker.getStats().addRandomAttribute(-penaltyPoints);
-                            attacker.recalcPower();
-                            try {
-                                attackerIO.printMessage("逃跑惩罚：损失了" + penaltyPoints + "点属性");
-                                // 逃跑后也要确保HP大于0，防止无法开始新回合
-                                if (!attacker.isAlive()) {
-                                    attacker.getStats().setHpCurrent(attacker.getStats().getHpMax() / 2);
-                                }
-                                attackerIO.printMessage("请等待下一回合。");
-                            } catch (Exception e) {
-                                // 发送消息失败，但继续处理
-                                defaultIO.printErrorMessage("通知逃跑玩家 " + attacker.getName() + " 失败: " + e.getMessage());
-                            }
-                            // 唤醒等待中的玩家线程
-                            synchronized (this) {
-                                this.notifyAll();
-                            }
-                            
-                            // 检查是否只剩一个玩家（逃跑后可能只剩一个）
-                            participants = playerManager.getArenaParticipants();
-                            participants.removeIf(p -> !p.getStats().isAlive());
-                            if (participants.size() <= 1) {
-                                break; // 跳出内层循环
-                            }
-                            
-                            // 逃跑后直接继续下一个玩家
-                            continue;
-                        } else {
-                            Player target = targets.get(choice - 1);
-                            boolean attackerDefeated = performArenaAttack(attacker, target, attackerIO);
-                            
-                            // 如果攻击者被打败，从参与者列表中移除
-                            if (attackerDefeated || !attacker.getStats().isAlive()) {
-                                playerManager.removeArenaParticipant(attacker.getName());
-                                synchronized (participantsLock) {
-                                    participants.remove(attacker);
-                                }
-                                // 立即通知战败玩家
-                                try {
-                                    if (attackerIO.isConnected() && !attackerIO.isTimedOut()) {
-                                        attackerIO.printMessage("\n你已被淘汰出局！请等待下一回合。");
-                                        // 战败保底恢复生命，确保能进入下一回合
-                                        attacker.getStats().setHpCurrent(attacker.getStats().getHpMax() / 2);
-                                    }
-                                } catch (Exception e) {
-                                    defaultIO.printErrorMessage("通知战败玩家 " + attacker.getName() + " 失败: " + e.getMessage());
-                                }
-                                // 唤醒等待中的玩家线程
-                                synchronized (this) {
-                                    this.notifyAll();
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        defaultIO.printErrorMessage(attacker.getName() + " 选择攻击目标时出错: " + e.getMessage());
-                        // 如果连接断开，标记为AI接管
-                        if (!attackerIO.isConnected() || attackerIO.isTimedOut()) {
-                            playerManager.setAiControlled(attacker.getName(), true);
-                            // 使用AI选择目标（使用默认IO，避免使用断开的IO）
-                            if (!targets.isEmpty()) {
-                                Player target = targets.get(new java.util.Random().nextInt(targets.size()));
-                    boolean attackerDefeated = performArenaAttack(attacker, target, defaultIO);
-                    // 如果攻击者被打败，从参与者列表中移除
-                    if (attackerDefeated || !attacker.getStats().isAlive()) {
-                        playerManager.removeArenaParticipant(attacker.getName());
-                        synchronized (participantsLock) {
-                            participants.remove(attacker);
-                        }
-                        // 战败恢复生命值，确保能继续
-                        attacker.getStats().setHpCurrent(attacker.getStats().getHpMax() / 2);
-                        // 唤醒等待中的玩家线程
-                        synchronized (this) {
-                            this.notifyAll();
-                        }
-                    }
-                            }
-                        } else {
-                            // 其他错误，从决斗池中移除
-                            playerManager.removeArenaParticipant(attacker.getName());
-                            synchronized (participantsLock) {
-                                participants.remove(attacker);
-                            }
-                            // 尝试通知玩家
-                            try {
-                                if (attackerIO != null && attackerIO.isConnected() && !attackerIO.isTimedOut()) {
-                                    attackerIO.printMessage("\n由于错误，你已退出决斗池！请等待下一回合。");
-                                }
-                            } catch (Exception ex) {
-                                defaultIO.printErrorMessage("通知玩家 " + attacker.getName() + " 失败: " + ex.getMessage());
-                            }
-                            // 唤醒等待中的玩家线程
-                            synchronized (this) {
-                                this.notifyAll();
-                            }
-                        }
-                    }
-                
-                // 检查是否只剩一个玩家
-                participants = playerManager.getArenaParticipants();
-                participants.removeIf(p -> !p.getStats().isAlive());
-                if (participants.size() <= 1) {
-                    break;
-                }
-            }
-        }
-        
-        // 决斗结束，处理结果
-        participants = playerManager.getArenaParticipants();
-        participants.removeIf(p -> !p.getStats().isAlive());
-        
-        if (participants.size() == 1) {
-            // 有胜利者
-            Player winner = participants.get(0);
-            GameIO winnerIO = getPlayerIO(winner.getName());
-            try {
-                winnerIO.printMessage("\n===== 决斗池结束 =====");
-                winnerIO.printMessage("恭喜！" + winner.getName() + " 是最后的胜利者！");
-                
-                // 胜利奖励（决斗池胜利奖励：3-7点属性 + 15-25战力）
-                int rewardPoints = main.RandomUtils.getRandomInt(3, 7);
-                winner.getStats().addRandomAttribute(rewardPoints);
-                winner.recalcPower();
-                
-                // PvP额外战力奖励
-                int powerBonus = main.RandomUtils.getRandomInt(15, 25);
-                winner.setPower(winner.getPower() + powerBonus);
-                
-                winnerIO.printMessage("获得奖励：" + rewardPoints + " 点属性 + " + powerBonus + " 战力");
-                winner.incrementRound();
-            } catch (Exception e) {
-                defaultIO.printErrorMessage("向胜利者发送消息失败: " + e.getMessage());
-            }
-        } else if (participants.isEmpty()) {
-            // 没有胜利者（所有人都死了或逃跑了）
-            defaultIO.printMessage("决斗池结束，没有胜利者。");
-        } else {
-            // 多个玩家（不应该发生，但处理一下）
-            defaultIO.printMessage("决斗池结束，剩余玩家: " + participants.size());
-        }
-        
-        // 清空决斗池参与者
-        playerManager.clearArenaParticipants();
-        
-        // 战斗结束广播
-        defaultIO.printMessage("决斗池战斗已结束。");
     }
     
+    /**
+     * 并行处理决斗池战斗（新版本）
+     */
     /**
      * 处理并行决斗池战斗
      * 所有玩家同时选择行动，然后一起执行
@@ -962,9 +668,30 @@ public class MultiPlayerGame {
                 target = targets.get(choice - 1);
             }
             
-            // 第二步：选择技能（真人玩家不需要选择，直接使用主技能）
-            // 在新的并行系统中，防御方不需要选择技能
-            SkillType skill = player.getMainStyle();
+            // 第二步：选择技能
+            SkillType skill;
+            if (isAI) {
+                // AI 自动选择技能（使用主技能）
+                skill = player.getMainStyle();
+            } else {
+                // 真人玩家选择技能
+                io.printMessage("\n" + player.getName() + " 请选择你的招式：");
+                List<SkillType> availableSkills = new ArrayList<>();
+                int index = 1;
+                for (SkillType skillType : SkillType.values()) {
+                    if (player.hasSkill(skillType)) {
+                        availableSkills.add(skillType);
+                        String mainIndicator = (skillType == player.getMainStyle()) ? " (主)" : "";
+                        io.printMessage(index + ". " + skillType.getName() + mainIndicator +
+                                     " (当前熟练度: " + player.getSkillLevel(skillType) + ")");
+                        index++;
+                    }
+                }
+                
+                int skillChoice = io.readIntInput("请输入选择 (1-" + availableSkills.size() + "): ", 
+                                                 1, availableSkills.size());
+                skill = availableSkills.get(skillChoice - 1);
+            }
             
             return new PvPBattleAction(player, skill, target);
             
@@ -1000,12 +727,24 @@ public class MultiPlayerGame {
             Player defender = action.getTarget();
             SkillType attackerSkill = action.getSkill();
             
-            // 获取防御者的技能（用于判断克制）
+            // 检查是否存在互相攻击的情况（技能克制只在互相攻击时生效）
             PvPBattleAction defenderAction = actions.get(defender.getName());
-            SkillType defenderSkill = defenderAction != null ? defenderAction.getSkill() : defender.getMainStyle();
+            SkillType defenderSkill = defender.getMainStyle(); // 防御者使用主技能进行防御
+            boolean isMutualAttack = false;
+            
+            if (defenderAction != null && !defenderAction.isEscape()) {
+                // 检查防御者是否也在攻击攻击者
+                if (defenderAction.getTarget() != null && 
+                    defenderAction.getTarget().getName().equals(attacker.getName())) {
+                    isMutualAttack = true;
+                    defenderSkill = defenderAction.getSkill(); // 如果互相攻击，使用防御者选择的技能
+                }
+            }
             
             // 计算伤害（使用新的 PvP 伤害计算方法）
-            int damage = defender.calculatePvPDamage(attacker, attackerSkill, defenderSkill);
+            // 如果不是互相攻击，技能克制不生效（传入 null）
+            int damage = defender.calculatePvPDamage(attacker, attackerSkill, 
+                                                    isMutualAttack ? defenderSkill : null);
             
             // 累加伤害
             damageMap.put(defender.getName(), damageMap.getOrDefault(defender.getName(), 0) + damage);
@@ -1013,7 +752,7 @@ public class MultiPlayerGame {
             // 记录攻击信息
             String attackInfo = attacker.getName() + " 使用「" + attackerSkill.getName() + "」攻击 " + 
                               defender.getName() + "，造成 " + damage + " 点伤害";
-            if (attackerSkill.counters(defenderSkill)) {
+            if (isMutualAttack && attackerSkill.counters(defenderSkill)) {
                 attackInfo += "（技能克制！）";
             }
             attackInfoMap.computeIfAbsent(defender.getName(), k -> new ArrayList<>()).add(attackInfo);

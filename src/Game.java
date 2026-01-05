@@ -95,7 +95,7 @@ public class Game {
 
         // 分配属性点
         consoleIO.println("\n你有 5 点属性可以自由分配 (每项基础为 10 点)。");
-        consoleIO.println("属性包括：力量(STR)、敏捷(AGI)、体质(CON)、智力(INT)、运气(LUK)");
+        consoleIO.println("属性包括：力量(STR)、敏捷(AGI)、体质(CON)、智力(INT)、运气(LUK)、防御(DEF)");
         consoleIO.println("直接回车将平均分配剩余点数。");
 
         Stats stats = allocateAttributes();
@@ -159,29 +159,33 @@ public class Game {
         int con = baseValue;
         int intel = baseValue;
         int luk = baseValue;
+        int def = baseValue;
 
         consoleIO.println("当前属性状态：");
-        showAttributeStatus(str, agi, con, intel, luk, remainingPoints);
+        showAttributeStatus(str, agi, con, intel, luk, def, remainingPoints);
 
         while (remainingPoints > 0) {
-            consoleIO.println("\n请输入要加点的属性名 (str/agi/con/int/luk)，直接回车将平均分配剩余点数：");
+            consoleIO.println("\n请输入要加点的属性名 (str/agi/con/int/luk/def)，直接回车将平均分配剩余点数：");
             String input = consoleIO.readLine().toLowerCase().trim();
 
             if (input.isEmpty()) {
                 // 平均分配剩余点数
-                int share = remainingPoints / 5;
-                int extra = remainingPoints % 5;
+                int share = remainingPoints / 6;
+                int extra = remainingPoints % 6;
                 str += share;
                 agi += share;
                 con += share;
                 intel += share;
                 luk += share;
+                def += share;
                 
                 // 剩余的一点点补在前面的属性上
                 if (extra > 0) str++;
                 if (extra > 1) agi++;
                 if (extra > 2) con++;
                 if (extra > 3) intel++;
+                if (extra > 4) luk++;
+                if (extra > 5) def++;
                 
                 remainingPoints = 0;
                 break;
@@ -223,27 +227,31 @@ public class Game {
                 case "luk":
                     luk += pointsToAdd;
                     break;
+                case "def":
+                    def += pointsToAdd;
+                    break;
                 default:
-                    consoleIO.println("无效的属性名，请输入 str/agi/con/int/luk 之一。");
+                    consoleIO.println("无效的属性名，请输入 str/agi/con/int/luk/def 之一。");
                     continue;
             }
 
             remainingPoints -= pointsToAdd;
-            showAttributeStatus(str, agi, con, intel, luk, remainingPoints);
+            showAttributeStatus(str, agi, con, intel, luk, def, remainingPoints);
         }
 
-        return new Stats(str, agi, con, intel, luk);
+        return new Stats(str, agi, con, intel, luk, def);
     }
 
     /**
      * 显示属性状态
      */
-    private void showAttributeStatus(int str, int agi, int con, int intel, int luk, int remaining) {
+    private void showAttributeStatus(int str, int agi, int con, int intel, int luk, int def, int remaining) {
         consoleIO.println("STR = " + str + " (力量)");
         consoleIO.println("AGI = " + agi + " (敏捷)");
         consoleIO.println("CON = " + con + " (体质)");
         consoleIO.println("INT = " + intel + " (智力)");
         consoleIO.println("LUK = " + luk + " (运气)");
+        consoleIO.println("DEF = " + def + " (防御)");
         consoleIO.println("剩余分配点数：" + remaining);
     }
 

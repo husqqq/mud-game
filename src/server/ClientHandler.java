@@ -557,15 +557,15 @@ public class ClientHandler extends Thread {
     private Stats allocateAttributesForNewPlayer() {
         int baseValue = 10;
         int remaining = 5;
-        int str = baseValue, agi = baseValue, con = baseValue, intel = baseValue, luk = baseValue;
+        int str = baseValue, agi = baseValue, con = baseValue, intel = baseValue, luk = baseValue, def = baseValue;
 
         sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
-            "\n你有5点属性可以自由分配（基础均为10点）。\n属性包括：力量(STR)、敏捷(AGI)、体质(CON)、智力(INT)、运气(LUK)\n输入属性名分配点数，回车直接平均分配剩余点数。"));
-        showAttributeStatus(str, agi, con, intel, luk, remaining);
+            "\n你有5点属性可以自由分配（基础均为10点）。\n属性包括：力量(STR)、敏捷(AGI)、体质(CON)、智力(INT)、运气(LUK)、防御(DEF)\n输入属性名分配点数，回车直接平均分配剩余点数。"));
+        showAttributeStatus(str, agi, con, intel, luk, def, remaining);
 
         while (remaining > 0 && connected) {
             sendMessage(new GameMessage(MessageType.REQUEST_INPUT,
-                "请输入要加点的属性名 (str/agi/con/int/luk)，回车平均分配剩余点数: "));
+                "请输入要加点的属性名 (str/agi/con/int/luk/def)，回车平均分配剩余点数: "));
             GameMessage attrMsg = waitForUserInput();
             if (attrMsg == null) {
                 break; // 连接问题，使用当前值
@@ -573,14 +573,15 @@ public class ClientHandler extends Thread {
             String attr = attrMsg.getData().trim().toLowerCase();
             if (attr.isEmpty()) {
                 // 平均分配剩余点数
-                int share = remaining / 5;
-                int extra = remaining % 5;
+                int share = remaining / 6;
+                int extra = remaining % 6;
                 str += share;
                 agi += share;
                 con += share;
                 intel += share;
                 luk += share;
-                int[] extras = {0, 1, 2, 3, 4};
+                def += share;
+                int[] extras = {0, 1, 2, 3, 4, 5};
                 for (int i = 0; i < extra; i++) {
                     switch (extras[i]) {
                         case 0 -> str++;
@@ -588,6 +589,7 @@ public class ClientHandler extends Thread {
                         case 2 -> con++;
                         case 3 -> intel++;
                         case 4 -> luk++;
+                        case 5 -> def++;
                         default -> {
                         }
                     }
@@ -620,19 +622,20 @@ public class ClientHandler extends Thread {
                 case "con" -> con += pointsToAdd;
                 case "int", "intel" -> intel += pointsToAdd;
                 case "luk" -> luk += pointsToAdd;
+                case "def" -> def += pointsToAdd;
                 default -> validAttr = false;
             }
 
             if (!validAttr) {
-                sendMessage(new GameMessage(MessageType.ERROR, "无效的属性名，请输入 str/agi/con/int/luk 之一。"));
+                sendMessage(new GameMessage(MessageType.ERROR, "无效的属性名，请输入 str/agi/con/int/luk/def 之一。"));
                 continue;
             }
 
             remaining -= pointsToAdd;
-            showAttributeStatus(str, agi, con, intel, luk, remaining);
+            showAttributeStatus(str, agi, con, intel, luk, def, remaining);
         }
 
-        return new Stats(str, agi, con, intel, luk);
+        return new Stats(str, agi, con, intel, luk, def);
     }
 
     /**
@@ -660,13 +663,14 @@ public class ClientHandler extends Thread {
         return SkillType.SWORD;
     }
 
-    private void showAttributeStatus(int str, int agi, int con, int intel, int luk, int remaining) {
+    private void showAttributeStatus(int str, int agi, int con, int intel, int luk, int def, int remaining) {
         sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
             "STR = " + str + " (力量)\n" +
             "AGI = " + agi + " (敏捷)\n" +
             "CON = " + con + " (体质)\n" +
             "INT = " + intel + " (智力)\n" +
             "LUK = " + luk + " (运气)\n" +
+            "DEF = " + def + " (防御)\n" +
             "剩余分配点数：" + remaining));
     }
     
