@@ -204,10 +204,12 @@ public class Player extends CharacterBase implements Serializable {
     
     /**
      * 获取战斗奖励
+     * @param powerBonus 战力加成
+     * @return 获得的属性点数
      */
-    public void gainBattleRewards(int powerBonus) {
-        // 随机增加属性点
-        int randomPoints = 1 + (int)(Math.random() * 2); // 随机增加1-2点属性
+    public int gainBattleRewards(int powerBonus) {
+        // PvE战斗奖励：随机增加2-4点属性（高于修炼的1-2点，低于PvP的3-7点）
+        int randomPoints = RandomUtils.getRandomInt(2, 4);
         stats.addRandomAttribute(randomPoints);
         
         // 重新计算战力（包括属性点增加和奖励战力）
@@ -216,6 +218,8 @@ public class Player extends CharacterBase implements Serializable {
         
         // 更新称号
         updateTitle();
+        
+        return randomPoints;
     }
     
     // Getter方法

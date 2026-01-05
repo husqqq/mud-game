@@ -261,12 +261,12 @@ public class BattleService {
             int powerBonus = npc.getDifficulty().getRewardMultiplier();
             
             // 给予奖励（gainBattleRewards会处理属性点增加和战力重新计算）
-            player.gainBattleRewards(powerBonus);
+            int attributePoints = player.gainBattleRewards(powerBonus);
             
             // 显示奖励
             io.println("\n战斗奖励：");
             io.println("人物战力 +" + powerBonus);
-            io.println("根据战斗表现获得了随机属性点！");
+            io.println("根据战斗表现获得了 " + attributePoints + " 点属性！");
             
             return BattleResult.WIN;
         } else {

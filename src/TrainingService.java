@@ -113,16 +113,15 @@ public class TrainingService {
         
         // 根据结果处理
         if (success) {
-            // 随机提升属性（1-2点，与简单难度NPC战斗奖励相同）
-            // 简单难度NPC战斗奖励：1-2点属性，所以练功最多也只能获得2点
+            // 修炼奖励：随机提升1-2点属性（低于PvE战斗的2-4点，远低于PvP的3-7点）
             int attributePoint = RandomUtils.getRandomInt(1, 2);
             if (isMainStyle) {
-                // 主流派有20%加成，但不超过2点上限
+                // 主流派有20%加成，向上取整（最多2点）
                 attributePoint = Math.min(2, (int) Math.ceil(attributePoint * 1.2));
             }
             player.getStats().addRandomAttribute(attributePoint);
             player.recalcPower();
-            io.println("\n练功结果：成功！获得" + attributePoint + "点属性点！");
+            io.println("\n练功结果：成功！获得 " + attributePoint + " 点属性！");
             
             // 30%几率提升生命值上限（通过增加体质）
             if (RandomUtils.isSuccess((int) (HP_INCREASE_CHANCE * 100))) {
