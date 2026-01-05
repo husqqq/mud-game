@@ -4,7 +4,14 @@ echo ========================================
 echo 多人游戏压力测试
 echo ========================================
 echo.
+echo 重要提示：
+echo 1. 请先在另一个终端窗口运行服务器：run.bat
+echo 2. 等待服务器完全启动（显示"多人游戏服务器已启动"）
+echo 3. 然后按任意键开始测试
+echo.
+pause
 
+echo.
 echo 正在编译测试代码...
 javac -d bin -encoding UTF-8 src\test\*.java src\*.java src\client\*.java src\server\*.java src\network\*.java src\io\*.java
 

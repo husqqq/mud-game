@@ -31,27 +31,56 @@
 
 ## 如何运行
 
-### Windows
+### ⚠️ 重要：先启动服务器
 
-直接双击运行：
+**步骤 1：启动服务器**
+
+在第一个终端窗口运行：
+```batch
+run.bat
+```
+
+等待看到：
+```
+========================================
+欢迎来到多人武侠MUD游戏！
+========================================
+多人游戏服务器已启动，端口：12345
+等待玩家连接...
+```
+
+### 步骤 2：运行测试
+
+**Windows** - 在第二个终端窗口运行：
 ```batch
 run_stress_test.bat
 ```
 
-或在命令行中：
+或手动运行：
 ```batch
-run_stress_test.bat
-```
-
-### 手动运行
-
-```batch
-# 1. 编译
+# 1. 编译（如果还没编译）
 javac -d bin -encoding UTF-8 src\test\*.java src\*.java src\client\*.java src\server\*.java src\network\*.java src\io\*.java
 
 # 2. 运行测试
 cd bin
 java -cp . test.MultiPlayerStressTest
+```
+
+### 正确的运行顺序
+
+```
+终端 1                    终端 2
+-------                   -------
+run.bat                   
+  ↓
+服务器启动完成
+  ↓                       run_stress_test.bat
+                           ↓
+                         测试开始运行
+                           ↓
+服务器处理连接 ←→      客户端模拟操作
+  ↓                       ↓
+查看服务器日志         查看测试结果
 ```
 
 ## 测试结果

@@ -25,16 +25,17 @@ public class MultiPlayerStressTest {
         System.out.println("多人游戏压力测试");
         System.out.println("========================================");
         
-        // 先启动服务器
-        System.out.println("\n正在启动测试服务器...");
-        Thread serverThread = startTestServer();
-        
-        // 等待服务器启动
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        // 检查服务器是否运行
+        System.out.println("\n检查服务器连接...");
+        if (!checkServerRunning()) {
+            System.err.println("错误：服务器未运行！");
+            System.err.println("请先启动服务器：");
+            System.err.println("  Windows: 运行 run.bat");
+            System.err.println("  或手动: cd bin && java main.Main 2");
+            System.err.println("\n然后再运行此测试脚本。");
+            System.exit(1);
         }
+        System.out.println("服务器连接正常！");
         
         // 运行多轮测试
         int totalRounds = 5;
@@ -70,32 +71,20 @@ public class MultiPlayerStressTest {
             }
         }
         
-        // 关闭服务器
-        System.out.println("\n关闭测试服务器...");
-        serverThread.interrupt();
-        
+        System.out.println("\n测试完成！服务器仍在运行，可以手动关闭。");
         System.exit(0);
     }
     
     /**
-     * 启动测试服务器
+     * 检查服务器是否运行
      */
-    private static Thread startTestServer() {
-        Thread serverThread = new Thread(() -> {
-            try {
-                // 直接启动服务器（需要在classpath中）
-                Class<?> serverClass = Class.forName("main.GameServer");
-                java.lang.reflect.Method mainMethod = serverClass.getMethod("main", String[].class);
-                String[] args = {};
-                mainMethod.invoke(null, (Object) args);
-            } catch (Exception e) {
-                System.err.println("服务器启动失败: " + e.getMessage());
-                e.printStackTrace();
-            }
-        });
-        serverThread.setDaemon(true);
-        serverThread.start();
-        return serverThread;
+    private static boolean checkServerRunning() {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(SERVER_HOST, SERVER_PORT), 3000);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
     
     /**
