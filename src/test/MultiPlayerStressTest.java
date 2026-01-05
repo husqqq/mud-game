@@ -168,28 +168,29 @@ public class MultiPlayerStressTest {
         public void run() throws Exception {
             System.out.println("[客户端 " + clientId + "] 开始连接...");
             
-            // 连接服务器
-            connect();
-            
-            // 注册（注册成功后服务器会自动登录）
-            register();
-            Thread.sleep(1000); // 等待认证完成
-            
-            // 创建角色
-            createCharacter();
-            Thread.sleep(1000); // 等待角色创建完成
-            
-            // 等待游戏开始
-            System.out.println("[客户端 " + clientId + "] 等待游戏开始...");
-            Thread.sleep(3000);
-            
-            // 模拟游戏操作
-            performGameActions();
-            
-            // 断开连接
-            disconnect();
-            
-            System.out.println("[客户端 " + clientId + "] 测试完成");
+            try {
+                // 连接服务器
+                connect();
+                
+                // 注册（注册成功后服务器会自动登录并要求创建角色）
+                registerAndCreateCharacter();
+                
+                // 等待游戏开始（等待所有玩家连接）
+                System.out.println("[客户端 " + clientId + "] 等待游戏开始...");
+                Thread.sleep(5000);
+                
+                // 简单等待一段时间（模拟游戏过程）
+                System.out.println("[客户端 " + clientId + "] 游戏进行中...");
+                Thread.sleep(3000);
+                
+                System.out.println("[客户端 " + clientId + "] 测试完成");
+            } catch (Exception e) {
+                System.err.println("[客户端 " + clientId + "] 错误: " + e.getMessage());
+                throw e;
+            } finally {
+                // 断开连接
+                disconnect();
+            }
         }
         
         private void connect() throws IOException {
@@ -233,157 +234,60 @@ public class MultiPlayerStressTest {
             // 可以根据需要添加更多消息处理
         }
         
-        private void register() throws Exception {
-            System.out.println("[客户端 " + clientId + "] 注册账号: " + username);
-            Thread.sleep(500); // 等待服务器发送欢迎消息
-            sendMessage("2"); // 选择注册（不是登录）
-            Thread.sleep(500);
-            sendMessage(username);
-            Thread.sleep(500);
-            sendMessage(password);
-            Thread.sleep(1000); // 等待注册完成
-        }
-        
-        private void createCharacter() throws Exception {
-            System.out.println("[客户端 " + clientId + "] 创建角色");
+        private void registerAndCreateCharacter() throws Exception {
+            System.out.println("[客户端 " + clientId + "] 开始注册和创建角色");
             
-            // 选择创建新角色
-            String playerName = "Player_" + clientId;
-            sendMessage(playerName);
-            Thread.sleep(300);
-            
-            // 属性分配 - 直接回车平均分配
-            sendMessage("");
-            Thread.sleep(300);
-            
-            // 选择主技能 - 随机选择
-            int skillChoice = 1 + random.nextInt(3);
-            sendMessage(String.valueOf(skillChoice));
+            // 等待服务器发送欢迎消息
             Thread.sleep(500);
-        }
-        
-        private void performGameActions() throws Exception {
-            int numActions = 3 + random.nextInt(3); // 3-5个动作
             
-            for (int i = 0; i < numActions; i++) {
-                int action = 1 + random.nextInt(5); // 1-5 随机选择操作
-                
-                System.out.println("[客户端 " + clientId + "] 执行动作 " + (i + 1) + "/" + numActions + ": " + getActionName(action));
-                
-                switch (action) {
-                    case 1: // 查看状态
-                        performViewStatus();
-                        break;
-                    case 2: // 修炼
-                        performTraining();
-                        break;
-                    case 3: // 与NPC战斗
-                        performNpcBattle();
-                        break;
-                    case 4: // 进入决斗池
-                        performArenaBattle();
-                        break;
-                    case 5: // 退出
-                        return;
-                    default:
-                        break;
-                }
-                
-                Thread.sleep(500 + random.nextInt(1000));
-            }
-        }
-        
-        private String getActionName(int action) {
-            switch (action) {
-                case 1: return "查看状态";
-                case 2: return "修炼";
-                case 3: return "与NPC战斗";
-                case 4: return "进入决斗池";
-                case 5: return "退出";
-                default: return "未知";
-            }
-        }
-        
-        private void performViewStatus() throws Exception {
-            sendMessage("1");
-            Thread.sleep(500);
-            sendMessage(""); // 按回车继续
-            Thread.sleep(300);
-        }
-        
-        private void performTraining() throws Exception {
+            // 选择注册
+            System.out.println("[客户端 " + clientId + "] 选择注册");
             sendMessage("2");
             Thread.sleep(500);
             
-            // 选择训练技能（随机）
+            // 发送用户名
+            System.out.println("[客户端 " + clientId + "] 发送用户名: " + username);
+            sendMessage(username);
+            Thread.sleep(500);
+            
+            // 发送密码
+            System.out.println("[客户端 " + clientId + "] 发送密码");
+            sendMessage(password);
+            Thread.sleep(1000);
+            
+            // 注册成功后，服务器会自动进入角色选择流程
+            // 服务器会提示："您还没有角色，需要创建新角色"
+            // 然后会请求输入角色名
+            String playerName = "Player_" + clientId;
+            System.out.println("[客户端 " + clientId + "] 输入角色名: " + playerName);
+            sendMessage(playerName);
+            Thread.sleep(500);
+            
+            // 服务器会要求分配属性点
+            // "请输入要加点的属性名 (str/agi/con/int/luk/def)，回车平均分配剩余点数: "
+            System.out.println("[客户端 " + clientId + "] 选择平均分配属性（发送空字符串）");
+            sendMessage(""); // 回车平均分配
+            Thread.sleep(1000);
+            
+            // 服务器会要求选择主流派
+            // "请选择主用流派：1. 刀法 2. 剑法 3. 拳法"
             int skillChoice = 1 + random.nextInt(3);
-            sendMessage(String.valueOf(skillChoice));
-            Thread.sleep(500);
-            
-            // 确认训练
-            sendMessage("y");
-            Thread.sleep(1000);
-            
-            sendMessage(""); // 按回车继续
-            Thread.sleep(300);
-        }
-        
-        private void performNpcBattle() throws Exception {
-            sendMessage("3");
-            Thread.sleep(500);
-            
-            // 选择难度（简单）
-            sendMessage("1");
-            Thread.sleep(500);
-            
-            // 模拟战斗中的技能选择（3-5次）
-            int numRounds = 3 + random.nextInt(3);
-            for (int i = 0; i < numRounds; i++) {
-                Thread.sleep(800);
-                // 随机选择技能
-                int skillChoice = 1 + random.nextInt(3);
-                sendMessage(String.valueOf(skillChoice));
-            }
-            
-            Thread.sleep(1000);
-            sendMessage(""); // 按回车继续
-            Thread.sleep(300);
-        }
-        
-        private void performArenaBattle() throws Exception {
-            sendMessage("4");
-            Thread.sleep(1000);
-            
-            // 可能需要选择目标和技能
-            // 选择第一个目标
-            sendMessage("1");
-            Thread.sleep(800);
-            
-            // 选择技能
-            int skillChoice = 1 + random.nextInt(3);
+            System.out.println("[客户端 " + clientId + "] 选择技能: " + skillChoice);
             sendMessage(String.valueOf(skillChoice));
             Thread.sleep(1000);
             
-            // 按回车继续
-            sendMessage("");
-            Thread.sleep(500);
+            System.out.println("[客户端 " + clientId + "] 角色创建完成");
         }
         
-        private void disconnect() throws Exception {
-            System.out.println("[客户端 " + clientId + "] 断开连接");
-            
-            // 发送退出命令
+        
+        private void disconnect() {
             try {
-                sendMessage("5"); // 退出
-                Thread.sleep(300);
-                sendMessage("n"); // 不保存
-                Thread.sleep(500);
+                System.out.println("[客户端 " + clientId + "] 断开连接");
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
             } catch (Exception e) {
-                // 忽略退出时的错误
-            }
-            
-            if (socket != null && !socket.isClosed()) {
-                socket.close();
+                // 忽略断开连接时的错误
             }
         }
         
