@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
  * 格式: [消息类型: 1字节][字符串长度: 4字节][字符串内容: UTF-8编码]
  */
 public class MessageSerializer {
+    // 最长1MB，防止异常数据撑爆内存
+    private static final int MAX_MESSAGE_BYTES = 1024 * 1024;
     
     /**
      * 序列化消息到输出流
@@ -34,11 +36,6 @@ public class MessageSerializer {
      */
     public static GameMessage deserialize(DataInputStream in) throws IOException {
         try {
-            // 检查是否有足够的数据（至少5字节：1字节类型 + 4字节长度）
-            if (in.available() < 5) {
-                throw new IOException("数据不足，无法读取完整消息");
-            }
-            
             // 读取消息类型（1字节）
             byte typeValue = in.readByte();
             MessageType type;
@@ -55,15 +52,10 @@ public class MessageSerializer {
             int dataLength = in.readInt();
             
             // 验证数据长度（防止异常大的数据）
-            if (dataLength < 0 || dataLength > 1024 * 1024) { // 最大1MB
+            if (dataLength < 0 || dataLength > MAX_MESSAGE_BYTES) {
                 throw new IOException("无效的数据长度: " + dataLength);
             }
-            
-            // 检查是否有足够的数据读取字符串内容
-            if (in.available() < dataLength) {
-                throw new IOException("数据不足，无法读取字符串内容（需要: " + dataLength + "，可用: " + in.available() + "）");
-            }
-            
+
             // 读取字符串内容
             byte[] dataBytes = new byte[dataLength];
             in.readFully(dataBytes);
@@ -86,7 +78,8 @@ public class MessageSerializer {
             return false;
         }
         try {
-            return in.available() > 0;
+            // 至少要有1字节才能尝试读取消息头
+            return in.available() >= 1;
         } catch (IOException e) {
             // 流可能已关闭
             return false;

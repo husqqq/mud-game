@@ -12,6 +12,7 @@ import java.io.*;
 import java.net.Socket;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 客户端处理器
@@ -22,14 +23,14 @@ public class ClientHandler extends Thread {
     private final GameServer server;
     private DataInputStream dataIn;
     private DataOutputStream dataOut;
-    private String username;
-    private String playerName;
-    private boolean authenticated;
-    private boolean connected;
-    private final BlockingQueue<String> inputQueue;  // 输入队列
-    private long lastHeartbeatTime;  // 最后心跳时间
-    private boolean waitingForOthers;  // 是否正在等待其他玩家
-    private long waitingStartTime;  // 开始等待的时间
+    private volatile String username;  // 使用 volatile 保证可见性
+    private volatile String playerName;  // 使用 volatile 保证可见性
+    private volatile boolean authenticated;  // 使用 volatile 保证可见性
+    private volatile boolean connected;  // 使用 volatile 保证可见性
+    private final BlockingQueue<String> inputQueue;  // 输入队列，已经是线程安全的
+    private volatile long lastHeartbeatTime;  // 最后心跳时间，使用 volatile 保证可见性
+    private volatile boolean waitingForOthers;  // 是否正在等待其他玩家，使用 volatile 保证可见性
+    private volatile long waitingStartTime;  // 开始等待的时间，使用 volatile 保证可见性
     private static final long HEARTBEAT_INTERVAL_MS = 20000;  // 翻倍：20秒
     private static final long HEARTBEAT_TIMEOUT_MS = 60000;  // 翻倍：60秒超时
     
@@ -47,6 +48,7 @@ public class ClientHandler extends Thread {
     @Override
     public void run() {
         try {
+            socket.setSoTimeout((int) HEARTBEAT_TIMEOUT_MS);
             dataIn = new DataInputStream(socket.getInputStream());
             dataOut = new DataOutputStream(socket.getOutputStream());
             
@@ -70,11 +72,7 @@ public class ClientHandler extends Thread {
                         .orElse(null);
 
                     if (existingPlayer == null) {
-                        // 创建新玩家（使用默认属性）
-                        Stats defaultStats = new Stats(10, 10, 10, 10, 10); // 默认属性
-                        SkillType mainSkill = SkillType.SWORD; // 默认主技能
-
-                        Player newPlayer = new Player(playerName, username, defaultStats, mainSkill);
+                        Player newPlayer = createPlayerWithCustomization(playerName);
                         game.getPlayerManager().addPlayer(newPlayer);
 
                         sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
@@ -110,34 +108,13 @@ public class ClientHandler extends Thread {
                                 // 等待其他玩家时不计入超时检测，只更新等待开始时间（如果还没设置）
                                 if (waitingStartTime == 0) {
                                     waitingStartTime = System.currentTimeMillis();
+                                    lastHeartbeatTime = waitingStartTime; // 等待时不计算超时
                                 }
                                 Thread.sleep(100);  // 短暂休眠
                                 continue;  // 跳过超时检测
                             }
                             
-                            // 检查心跳超时 - 根据游戏状态调整超时时间
-                            long timeoutThreshold;
-                            if (playerName != null) {
-                                // 玩家已在游戏中，使用更长的超时时间
-                                timeoutThreshold = HEARTBEAT_TIMEOUT_MS * 3; // 翻倍：180秒
-                            } else if (authenticated) {
-                                // 已认证但未进入游戏
-                                timeoutThreshold = HEARTBEAT_TIMEOUT_MS * 2; // 翻倍：120秒
-                            } else {
-                                // 未认证
-                                timeoutThreshold = HEARTBEAT_TIMEOUT_MS; // 翻倍：60秒
-                            }
-
-                            if (System.currentTimeMillis() - lastHeartbeatTime > timeoutThreshold) {
-                                System.out.println("客户端 " + (username != null ? username : "未知") + " 心跳超时，断开连接");
-                                System.out.println("认证状态: " + authenticated + ", 玩家名: " + playerName);
-                                System.out.println("最后心跳时间: " + new java.util.Date(lastHeartbeatTime));
-                                System.out.println("当前时间: " + new java.util.Date());
-                                System.out.println("超时阈值: " + timeoutThreshold + "ms (" +
-                                    (playerName != null ? "游戏中" : authenticated ? "已认证" : "未认证") + ")");
-                                connected = false;
-                                break;
-                            }
+                            checkHeartbeatTimeout();
                             Thread.sleep(100);  // 短暂休眠
                         }
                     } catch (IOException e) {
@@ -188,16 +165,34 @@ public class ClientHandler extends Thread {
                         // 心跳消息，更新心跳时间
                         lastHeartbeatTime = System.currentTimeMillis();
                         sendMessage(new GameMessage(MessageType.HEARTBEAT, "PONG"));
+                    } else if (message.getType() == MessageType.RECONNECT_REQUEST) {
+                        // 重连请求，重置认证状态并重新发送欢迎消息和登录选项
+                        authenticated = false;
+                        playerName = null;
+                        // 只发送一次欢迎消息，避免重复
+                        sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
+                            "\n已重新连接到服务器\n注意：重连后需要重新登录\n\n欢迎来到武侠世界！\n请选择：\n1. 登录\n2. 注册"));
+                        sendMessage(new GameMessage(MessageType.REQUEST_INPUT, "请选择 (1-2): "));
                     }
                     // 其他类型的消息忽略
                 } else {
                     Thread.sleep(100);
                 }
             } catch (IOException e) {
-                System.err.println("认证流程读取消息失败: " + e.getMessage());
-                if (e.getMessage() != null && e.getMessage().contains("连接")) {
+                String errorMsg = e.getMessage();
+                System.err.println("认证流程读取消息失败: " + errorMsg);
+                
+                // 如果是流不同步或数据错误，断开连接
+                if (errorMsg != null && (errorMsg.contains("无效的消息类型") || 
+                                         errorMsg.contains("数据不足") || 
+                                         errorMsg.contains("无效的数据长度") ||
+                                         errorMsg.contains("连接"))) {
+                    System.err.println("流不同步或连接问题，断开连接");
+                    connected = false;
                     break; // 连接问题，退出循环
                 }
+                
+                // 其他错误，短暂等待后继续
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException ie) {
@@ -415,15 +410,13 @@ public class ClientHandler extends Thread {
             if (playerName != null) {
                 sendMessage(new GameMessage(MessageType.DISPLAY_TEXT, "进入游戏！角色: " + playerName));
             } else {
-                // 如果playerName还是null，使用默认名称
-                this.playerName = username + "_player";
+                // 如果playerName还是null，使用用户名作为默认名称
+                this.playerName = username; // 使用用户名，而不是username + "_player"
                 try {
                     server.getAuthService().bindPlayer(username, playerName);
                     var game = server.getGame();
                     if (game != null) {
-                        Stats defaultStats = new Stats(10, 10, 10, 10, 10);
-                        SkillType mainSkill = SkillType.SWORD;
-                        Player newPlayer = new Player(playerName, username, defaultStats, mainSkill);
+                        Player newPlayer = createPlayerWithCustomization(playerName);
                         game.getPlayerManager().addPlayer(newPlayer);
                     }
                     sendMessage(new GameMessage(MessageType.DISPLAY_TEXT, "进入游戏！角色: " + playerName));
@@ -436,14 +429,12 @@ public class ClientHandler extends Thread {
             e.printStackTrace();
             // 失败时创建默认玩家，但不递归调用createNewPlayer
             if (this.playerName == null) {
-                this.playerName = username + "_player";
+                this.playerName = username; // 使用用户名，而不是username + "_player"
                 try {
                     server.getAuthService().bindPlayer(username, playerName);
                     var game = server.getGame();
                     if (game != null) {
-                        Stats defaultStats = new Stats(10, 10, 10, 10, 10);
-                        SkillType mainSkill = SkillType.SWORD;
-                        Player newPlayer = new Player(playerName, username, defaultStats, mainSkill);
+                        Player newPlayer = createPlayerWithCustomization(playerName);
                         game.getPlayerManager().addPlayer(newPlayer);
                     }
                     sendMessage(new GameMessage(MessageType.DISPLAY_TEXT, "进入游戏！角色: " + playerName));
@@ -461,39 +452,14 @@ public class ClientHandler extends Thread {
         try {
             sendMessage(new GameMessage(MessageType.REQUEST_INPUT, "请输入角色名: "));
             
-            // 等待输入，带超时保护
-            GameMessage nameMsg = null;
-            long startTime = System.currentTimeMillis();
-            while (nameMsg == null && connected && !socket.isClosed()) {
-                try {
-                    if (MessageSerializer.hasData(dataIn)) {
-                        nameMsg = MessageSerializer.deserialize(dataIn);
-                        break;
-                    }
-                    // 检查超时（翻倍：60秒）
-                    if (System.currentTimeMillis() - startTime > 60000) {
-                        System.err.println("创建玩家超时");
-                        break;
-                    }
-                    Thread.sleep(100);
-                } catch (IOException e) {
-                    System.err.println("读取角色名失败: " + e.getMessage());
-                    if (e.getMessage() != null && e.getMessage().contains("连接")) {
-                        // 连接问题，直接返回
-                        return;
-                    }
-                    // 其他IO错误，重试
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-            }
+            // 使用waitForUserInput确保正确读取用户输入
+            GameMessage nameMsg = waitForUserInput();
             
-            if (nameMsg != null && nameMsg.getType() == MessageType.USER_INPUT) {
+            if (nameMsg != null) {
                 String name = nameMsg.getData().trim();
+                // 如果输入为空，使用用户名作为角色名，而不是username + "_player"
                 if (name.isEmpty()) {
-                    name = username + "_player";
+                    name = username;
                 }
                 this.playerName = name;
                 
@@ -515,10 +481,7 @@ public class ClientHandler extends Thread {
                     
                     if (existingPlayer == null) {
                         // 创建新玩家（使用默认属性）
-                        Stats defaultStats = new Stats(10, 10, 10, 10, 10); // 默认属性
-                        SkillType mainSkill = SkillType.SWORD; // 默认主技能
-
-                        Player newPlayer = new Player(playerName, username, defaultStats, mainSkill);
+                        Player newPlayer = createPlayerWithCustomization(playerName);
                         game.getPlayerManager().addPlayer(newPlayer);
 
                         sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
@@ -529,34 +492,34 @@ public class ClientHandler extends Thread {
                     }
                 }
             } else {
-                // 输入超时或无效，使用默认名称
-                System.err.println("创建玩家输入超时或无效，使用默认名称");
-                this.playerName = username + "_player";
+                // 输入超时或无效，使用用户名作为默认名称
+                System.err.println("创建玩家输入超时或无效，使用用户名作为角色名");
+                this.playerName = username; // 使用用户名，而不是username + "_player"
                 // 仍然创建玩家
                 server.getAuthService().bindPlayer(username, playerName);
                 var game = server.getGame();
                 if (game != null) {
-                    Stats defaultStats = new Stats(10, 10, 10, 10, 10);
-                    SkillType mainSkill = SkillType.SWORD;
-                    Player newPlayer = new Player(playerName, username, defaultStats, mainSkill);
+                    Player newPlayer = createPlayerWithCustomization(playerName);
                     game.getPlayerManager().addPlayer(newPlayer);
                 }
+                sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
+                    "角色 " + playerName + " 创建成功！"));
             }
         } catch (Exception e) {
             System.err.println("创建玩家失败: " + e.getMessage());
             e.printStackTrace();
-            // 使用默认名称，不递归调用
+            // 使用用户名作为默认名称
             if (this.playerName == null) {
-                this.playerName = username + "_player";
+                this.playerName = username; // 使用用户名，而不是username + "_player"
                 try {
                     server.getAuthService().bindPlayer(username, playerName);
                     var game = server.getGame();
                     if (game != null) {
-                        Stats defaultStats = new Stats(10, 10, 10, 10, 10);
-                        SkillType mainSkill = SkillType.SWORD;
-                        Player newPlayer = new Player(playerName, username, defaultStats, mainSkill);
-                        game.getPlayerManager().addPlayer(newPlayer);
+                    Player newPlayer = createPlayerWithCustomization(playerName);
+                    game.getPlayerManager().addPlayer(newPlayer);
                     }
+                    sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
+                        "角色 " + playerName + " 创建成功！"));
                 } catch (Exception ex) {
                     System.err.println("创建默认玩家也失败: " + ex.getMessage());
                 }
@@ -571,6 +534,139 @@ public class ClientHandler extends Thread {
         // 这里可以从存档加载玩家，或创建新玩家
         // 暂时创建新玩家
         createNewPlayer();
+    }
+
+    /**
+    * 创建玩家（带初始加点与主流派选择，支持回车默认）
+    */
+    private Player createPlayerWithCustomization(String playerName) {
+        Stats stats = allocateAttributesForNewPlayer();
+        SkillType mainStyle = selectInitialSkillWithDefault();
+        Player newPlayer = new Player(playerName, username != null ? username : playerName, stats, mainStyle);
+
+        sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
+            "角色名：" + newPlayer.getName() + "\n主用流派：" + mainStyle.getName() +
+            "\n初始战力：" + newPlayer.getPower()));
+        return newPlayer;
+    }
+
+    /**
+    * 分配属性点，回车默认平均分配剩余点数
+    */
+    private Stats allocateAttributesForNewPlayer() {
+        int baseValue = 10;
+        int remaining = 5;
+        int str = baseValue, agi = baseValue, con = baseValue, intel = baseValue, luk = baseValue;
+
+        sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
+            "\n你有5点属性可以自由分配（基础均为10点）。\n属性包括：力量(STR)、敏捷(AGI)、体质(CON)、智力(INT)、运气(LUK)\n输入属性名分配点数，回车直接平均分配剩余点数。"));
+        showAttributeStatus(str, agi, con, intel, luk, remaining);
+
+        while (remaining > 0 && connected) {
+            sendMessage(new GameMessage(MessageType.REQUEST_INPUT,
+                "请输入要加点的属性名 (str/agi/con/int/luk)，回车平均分配剩余点数: "));
+            GameMessage attrMsg = waitForUserInput();
+            if (attrMsg == null) {
+                break; // 连接问题，使用当前值
+            }
+            String attr = attrMsg.getData().trim().toLowerCase();
+            if (attr.isEmpty()) {
+                // 平均分配剩余点数
+                int share = remaining / 5;
+                int extra = remaining % 5;
+                str += share;
+                agi += share;
+                con += share;
+                intel += share;
+                luk += share;
+                int[] extras = {0, 1, 2, 3, 4};
+                for (int i = 0; i < extra; i++) {
+                    switch (extras[i]) {
+                        case 0 -> str++;
+                        case 1 -> agi++;
+                        case 2 -> con++;
+                        case 3 -> intel++;
+                        case 4 -> luk++;
+                        default -> {
+                        }
+                    }
+                }
+                remaining = 0;
+                break;
+            }
+
+            sendMessage(new GameMessage(MessageType.REQUEST_INPUT,
+                "要增加多少点？(1-" + remaining + "，回车默认1): "));
+            GameMessage pointsMsg = waitForUserInput();
+            int pointsToAdd = 1;
+            if (pointsMsg != null) {
+                String ptsStr = pointsMsg.getData().trim();
+                if (!ptsStr.isEmpty()) {
+                    try {
+                        pointsToAdd = Integer.parseInt(ptsStr);
+                    } catch (NumberFormatException ignored) {
+                        pointsToAdd = 1;
+                    }
+                }
+            }
+            if (pointsToAdd < 1) pointsToAdd = 1;
+            if (pointsToAdd > remaining) pointsToAdd = remaining;
+
+            boolean validAttr = true;
+            switch (attr) {
+                case "str" -> str += pointsToAdd;
+                case "agi" -> agi += pointsToAdd;
+                case "con" -> con += pointsToAdd;
+                case "int", "intel" -> intel += pointsToAdd;
+                case "luk" -> luk += pointsToAdd;
+                default -> validAttr = false;
+            }
+
+            if (!validAttr) {
+                sendMessage(new GameMessage(MessageType.ERROR, "无效的属性名，请输入 str/agi/con/int/luk 之一。"));
+                continue;
+            }
+
+            remaining -= pointsToAdd;
+            showAttributeStatus(str, agi, con, intel, luk, remaining);
+        }
+
+        return new Stats(str, agi, con, intel, luk);
+    }
+
+    /**
+    * 选择初始主流派，回车默认剑法
+    */
+    private SkillType selectInitialSkillWithDefault() {
+        sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
+            "\n请选择主用流派：\n1. 刀法 (SABER)\n2. 剑法 (SWORD)\n3. 拳法 (FIST)\n回车默认选择剑法"));
+        sendMessage(new GameMessage(MessageType.REQUEST_INPUT, "请选择 (1-3，回车默认2): "));
+        GameMessage choiceMsg = waitForUserInput();
+        if (choiceMsg == null) {
+            return SkillType.SWORD;
+        }
+        String data = choiceMsg.getData().trim();
+        if (data.isEmpty()) {
+            return SkillType.SWORD;
+        }
+        try {
+            int choice = Integer.parseInt(data);
+            if (choice >= 1 && choice <= 3) {
+                return SkillType.values()[choice - 1];
+            }
+        } catch (NumberFormatException ignored) {
+        }
+        return SkillType.SWORD;
+    }
+
+    private void showAttributeStatus(int str, int agi, int con, int intel, int luk, int remaining) {
+        sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
+            "STR = " + str + " (力量)\n" +
+            "AGI = " + agi + " (敏捷)\n" +
+            "CON = " + con + " (体质)\n" +
+            "INT = " + intel + " (智力)\n" +
+            "LUK = " + luk + " (运气)\n" +
+            "剩余分配点数：" + remaining));
     }
     
     /**
@@ -616,11 +712,50 @@ public class ClientHandler extends Thread {
      */
     public synchronized void sendMessage(GameMessage message) {
         try {
-            if (dataOut != null && connected) {
-                MessageSerializer.serialize(message, dataOut);
+            // 检查连接状态和socket状态
+            if (dataOut != null && connected && socket != null && !socket.isClosed()) {
+                // 检查socket是否真的连接
+                if (socket.isConnected() && !socket.isOutputShutdown()) {
+                    MessageSerializer.serialize(message, dataOut);
+                } else {
+                    // Socket已关闭或输出流已关闭
+                    connected = false;
+                    System.err.println("连接已关闭，无法发送消息");
+                }
+            } else if (!connected) {
+                // 连接已断开，不发送消息
+                return;
             }
+        } catch (java.net.SocketException e) {
+            // Socket异常，通常是连接被关闭
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.contains("连接") || errorMsg.contains("Connection") || 
+                                    errorMsg.contains("reset") || errorMsg.contains("abort"))) {
+                // 连接被关闭，这是正常的（客户端断开连接）
+                if (connected) {
+                    System.out.println("客户端 " + (username != null ? username : "未知") + " 连接已关闭");
+                }
+            } else {
+                System.err.println("发送消息失败 (Socket异常): " + errorMsg);
+            }
+            connected = false;
         } catch (IOException e) {
-            System.err.println("发送消息失败: " + e.getMessage());
+            // 其他IO异常
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.contains("连接") || errorMsg.contains("Connection") || 
+                                    errorMsg.contains("reset") || errorMsg.contains("abort") ||
+                                    errorMsg.contains("中止"))) {
+                // 连接被关闭，这是正常的
+                if (connected) {
+                    System.out.println("客户端 " + (username != null ? username : "未知") + " 连接已关闭");
+                }
+            } else {
+                System.err.println("发送消息失败: " + errorMsg);
+            }
+            connected = false;
+        } catch (Exception e) {
+            // 其他异常
+            System.err.println("发送消息时发生未知错误: " + e.getMessage());
             connected = false;
         }
     }
@@ -636,20 +771,13 @@ public class ClientHandler extends Thread {
      * 接收用户输入（带超时）
      */
     public String receiveInput(long timeoutMs) throws InterruptedException {
-        String input = inputQueue.poll();
-        if (input != null) {
-            return input;
+        if (timeoutMs == Long.MAX_VALUE) {
+            return inputQueue.take();
         }
-        // 如果队列为空，等待指定时间
-        long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < timeoutMs) {
-            input = inputQueue.poll();
-            if (input != null) {
-                return input;
-            }
-            Thread.sleep(100);
+        if (timeoutMs <= 0) {
+            return inputQueue.poll();
         }
-        return null;  // 超时
+        return inputQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
     }
     
     /**
@@ -665,9 +793,8 @@ public class ClientHandler extends Thread {
         } else {
             // 结束等待时，恢复最后心跳时间（从等待开始时间计算）
             if (waitingStartTime > 0) {
-                // 将等待期间的时间不计入超时检测
-                long waitingDuration = System.currentTimeMillis() - waitingStartTime;
-                // 不更新lastHeartbeatTime，保持原来的值，这样等待期间的时间不计入超时
+                // 重置心跳时间，避免刚结束等待就被误判为超时
+                this.lastHeartbeatTime = System.currentTimeMillis();
                 this.waitingStartTime = 0;
             }
         }
@@ -707,6 +834,26 @@ public class ClientHandler extends Thread {
     
     public boolean isConnected() {
         return connected;
+    }
+
+    /**
+     * 根据心跳检测连接是否超时
+     */
+    private void checkHeartbeatTimeout() {
+        long now = System.currentTimeMillis();
+        long timeoutThreshold;
+        if (playerName != null) {
+            timeoutThreshold = HEARTBEAT_TIMEOUT_MS * 3; // 游戏中给更长时间
+        } else if (authenticated) {
+            timeoutThreshold = HEARTBEAT_TIMEOUT_MS * 2; // 已认证但未进入游戏
+        } else {
+            timeoutThreshold = HEARTBEAT_TIMEOUT_MS;
+        }
+
+        if (now - lastHeartbeatTime > timeoutThreshold) {
+            System.out.println("客户端 " + (username != null ? username : "未知") + " 心跳超时，断开连接");
+            connected = false;
+        }
     }
 }
 

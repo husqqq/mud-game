@@ -156,8 +156,7 @@ public class ConsoleIO implements GameIO {
         printMessage("2. 去后山练功");
         printMessage("3. 下山找人切磋（NPC）");
         printMessage("4. 进入决斗池（PvP）");
-        printMessage("5. 保存并退出");
-        printMessage("6. 退出游戏");
+        printMessage("5. 退出游戏（可选择保存）");
     }
 
     @Override

@@ -166,8 +166,9 @@ public class UserAuthService {
     
     /**
      * 保存用户数据
+     * 使用同步确保文件写入的线程安全
      */
-    private void saveUsers() {
+    private synchronized void saveUsers() {
         try {
             Path dir = Paths.get(USER_DATA_DIR);
             if (!Files.exists(dir)) {

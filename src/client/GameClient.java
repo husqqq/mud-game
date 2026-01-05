@@ -24,6 +24,7 @@ public class GameClient {
     private DataOutputStream dataOut;
     private final AtomicBoolean connected;
     private final AtomicBoolean running;
+    private final AtomicBoolean reconnecting;  // 是否正在重连
     private Thread receiveThread;
     private Thread heartbeatThread;
     private final Scanner scanner;
@@ -33,6 +34,7 @@ public class GameClient {
         this.serverPort = serverPort;
         this.connected = new AtomicBoolean(false);
         this.running = new AtomicBoolean(false);
+        this.reconnecting = new AtomicBoolean(false);
         this.scanner = new Scanner(System.in);
     }
     
@@ -130,32 +132,33 @@ public class GameClient {
     private void receiveMessages() {
         while (running.get() && connected.get()) {
             try {
-                // 检查是否有可用数据（至少5字节：1字节类型 + 4字节长度）
-                if (dataIn != null && dataIn.available() >= 5) {
+                if (dataIn != null && MessageSerializer.hasData(dataIn)) {
                     try {
                         GameMessage message = MessageSerializer.deserialize(dataIn);
                         handleMessage(message);
                     } catch (IllegalArgumentException e) {
                         // 消息类型错误，可能是流不同步
                         System.err.println("消息反序列化错误: " + e.getMessage());
-                        System.err.println("可能是连接问题，尝试重新连接...");
-                        handleDisconnect();
+                        connected.set(false);
                         break;
                     } catch (EOFException e) {
                         // 流结束，连接可能已断开
                         System.err.println("流结束，连接可能已断开");
-                        handleDisconnect();
+                        connected.set(false);
                         break;
                     } catch (IOException e) {
                         // 其他IO错误，可能是流不同步或数据不完整
                         String errorMsg = e.getMessage();
-                        if (errorMsg != null && (errorMsg.contains("无效的消息类型") || errorMsg.contains("数据不足"))) {
+                        if (errorMsg != null && (errorMsg.contains("无效的消息类型") || errorMsg.contains("数据不足") || errorMsg.contains("无法读取"))) {
                             System.err.println("接收消息失败: " + errorMsg);
-                            System.err.println("可能是流不同步，尝试重新连接...");
-                            handleDisconnect();
+                            // 流不同步，标记断开并退出循环
+                            connected.set(false);
                             break;
                         } else {
-                            // 其他IO错误，继续尝试
+                            // 其他IO错误，检查连接状态
+                            if (!connected.get()) {
+                                break; // 连接已断开，退出循环
+                            }
                             System.err.println("接收消息时出错: " + errorMsg);
                             Thread.sleep(100); // 短暂等待后继续
                         }
@@ -166,13 +169,18 @@ public class GameClient {
             } catch (IOException e) {
                 if (connected.get()) {
                     System.err.println("接收消息失败: " + e.getMessage());
-                    handleDisconnect();
+                    connected.set(false);
                 }
                 break;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             }
+        }
+        
+        // 线程退出后，如果客户端仍在运行且尚未进入重连流程，触发重连
+        if (running.get() && !connected.get()) {
+            handleDisconnect();
         }
     }
     
@@ -185,14 +193,23 @@ public class GameClient {
                 System.out.print(message.getData());
                 break;
             case REQUEST_INPUT:
+                // 检查连接状态，如果已断开则不处理输入
+                if (!connected.get() || !running.get()) {
+                    break;
+                }
+                
                 System.out.print(message.getData());
                 // 检查是否是"按回车键继续"的提示，如果是则允许空输入
                 boolean allowEmpty = message.getData().contains("按回车键继续");
                 
                 // 循环读取输入
-                while (true) {
+                while (connected.get() && running.get()) {
                     try {
                         String input = scanner.nextLine().trim();
+                        // 再次检查连接状态
+                        if (!connected.get() || !running.get()) {
+                            break;
+                        }
                         if (!input.isEmpty() || allowEmpty) {
                             // 非空输入，或者允许空输入（按回车键继续）
                             sendMessage(new GameMessage(MessageType.USER_INPUT, input));
@@ -201,10 +218,20 @@ public class GameClient {
                             // 如果输入为空且不允许空输入，提示并重新读取
                             System.out.print("[输入为空，请重新输入]\n" + message.getData());
                         }
-                    } catch (Exception e) {
-                        // 读取输入出错，退出循环
-                        System.err.println("读取输入失败: " + e.getMessage());
+                    } catch (java.util.NoSuchElementException e) {
+                        // Scanner已关闭或流结束
+                        System.err.println("输入流已关闭");
                         break;
+                    } catch (Exception e) {
+                        // 读取输入出错，检查连接状态
+                        if (!connected.get() || !running.get()) {
+                            break;
+                        }
+                        System.err.println("读取输入失败: " + e.getMessage());
+                        // 如果是连接问题，退出循环
+                        if (e.getMessage() != null && e.getMessage().contains("end")) {
+                            break;
+                        }
                     }
                 }
                 break;
@@ -265,11 +292,52 @@ public class GameClient {
      */
     public void sendMessage(GameMessage message) {
         try {
-            if (dataOut != null && connected.get()) {
-                MessageSerializer.serialize(message, dataOut);
+            // 检查连接状态和socket状态
+            if (dataOut != null && connected.get() && socket != null && !socket.isClosed()) {
+                // 检查socket是否真的连接
+                if (socket.isConnected() && !socket.isOutputShutdown()) {
+                    MessageSerializer.serialize(message, dataOut);
+                } else {
+                    // Socket已关闭或输出流已关闭
+                    connected.set(false);
+                    System.err.println("连接已关闭，无法发送消息");
+                    handleDisconnect();
+                }
+            } else if (!connected.get()) {
+                // 连接已断开，不发送消息
+                return;
             }
+        } catch (java.net.SocketException e) {
+            // Socket异常，通常是连接被关闭
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.contains("连接") || errorMsg.contains("Connection") || 
+                                    errorMsg.contains("reset") || errorMsg.contains("abort") ||
+                                    errorMsg.contains("中止"))) {
+                // 连接被关闭，这是正常的（服务器断开连接）
+                if (connected.get()) {
+                    System.out.println("与服务器连接已关闭");
+                }
+            } else {
+                System.err.println("发送消息失败 (Socket异常): " + errorMsg);
+            }
+            handleDisconnect();
         } catch (IOException e) {
-            System.err.println("发送消息失败: " + e.getMessage());
+            // 其他IO异常
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.contains("连接") || errorMsg.contains("Connection") || 
+                                    errorMsg.contains("reset") || errorMsg.contains("abort") ||
+                                    errorMsg.contains("中止"))) {
+                // 连接被关闭，这是正常的
+                if (connected.get()) {
+                    System.out.println("与服务器连接已关闭");
+                }
+            } else {
+                System.err.println("发送消息失败: " + errorMsg);
+            }
+            handleDisconnect();
+        } catch (Exception e) {
+            // 其他异常
+            System.err.println("发送消息时发生未知错误: " + e.getMessage());
             handleDisconnect();
         }
     }
@@ -278,25 +346,95 @@ public class GameClient {
      * 处理断开连接
      */
     private void handleDisconnect() {
-        System.out.println("\n与服务器断开连接");
+        // 如果已经在重连中，避免重复处理
+        if (reconnecting.get()) {
+            return;
+        }
         
-        // 清理旧的连接
-        cleanupConnection();
+        // 如果已经断开，避免重复处理
+        if (!connected.get() && receiveThread == null && heartbeatThread == null) {
+            return;
+        }
         
-        // 尝试重连
-        if (running.get()) {
-            System.out.println("尝试重新连接...");
-            if (connect()) {
-                // 重新启动接收线程
-                receiveThread = new Thread(this::receiveMessages);
-                receiveThread.start();
+        // 设置重连标志，防止重复调用
+        if (!reconnecting.compareAndSet(false, true)) {
+            return; // 已经在重连中
+        }
+        
+        try {
+            System.out.println("\n与服务器断开连接");
+            
+            // 先停止运行标志，让线程自然退出
+            connected.set(false);
+            
+            // 等待线程结束（最多等待1秒）
+            try {
+                if (receiveThread != null && receiveThread.isAlive()) {
+                    receiveThread.join(1000);
+                }
+                if (heartbeatThread != null && heartbeatThread.isAlive()) {
+                    heartbeatThread.join(1000);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            
+            // 清理旧的连接
+            cleanupConnection();
+            
+            // 尝试重连（最多重试3次，避免无限重连）
+            if (running.get()) {
+                int reconnectAttempts = 0;
+                final int MAX_RECONNECT_ATTEMPTS = 3;
                 
-                // 重新启动心跳线程
-                heartbeatThread = new Thread(this::sendHeartbeat);
-                heartbeatThread.start();
-            } else {
+                while (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && running.get()) {
+                    System.out.println("尝试重新连接... (" + (reconnectAttempts + 1) + "/" + MAX_RECONNECT_ATTEMPTS + ")");
+                    if (connect()) {
+                        // 重连成功，但服务器会把它当作新连接处理
+                        // 发送重连请求，让服务器知道这是重连
+                        try {
+                            sendMessage(new GameMessage(MessageType.RECONNECT_REQUEST, "RECONNECT"));
+                        } catch (Exception e) {
+                            // 发送重连请求失败，继续处理
+                            System.err.println("发送重连请求失败: " + e.getMessage());
+                        }
+                        
+                        // 重新启动接收线程
+                        receiveThread = new Thread(this::receiveMessages);
+                        receiveThread.start();
+                        
+                        // 重新启动心跳线程
+                        heartbeatThread = new Thread(this::sendHeartbeat);
+                        heartbeatThread.start();
+                        reconnecting.set(false); // 重连成功，清除标志
+                        
+                        // 重连后，提示用户需要重新登录，继续运行等待服务器消息
+                        System.out.println("\n已重新连接到服务器");
+                        System.out.println("注意：重连后需要重新登录");
+                        System.out.println("请按照服务器提示进行操作...\n");
+                        
+                        return; // 重连成功，退出
+                    }
+                    reconnectAttempts++;
+                    
+                    // 等待一段时间再重试
+                    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        try {
+                            Thread.sleep(2000); // 等待2秒
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+                
+                // 重连失败，停止运行
+                System.err.println("重连失败，停止客户端");
                 running.set(false);
             }
+        } finally {
+            // 清除重连标志
+            reconnecting.set(false);
         }
     }
     

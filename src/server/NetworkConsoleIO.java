@@ -20,8 +20,8 @@ public class NetworkConsoleIO implements GameIO {
     
     private final ClientHandler clientHandler;
     private final ScheduledExecutorService scheduler;
-    private boolean timedOut;
-    private boolean connected;
+    private volatile boolean timedOut;  // 使用 volatile 保证可见性
+    private volatile boolean connected;  // 使用 volatile 保证可见性
     
     public NetworkConsoleIO(ClientHandler clientHandler) {
         this.clientHandler = clientHandler;
@@ -32,8 +32,35 @@ public class NetworkConsoleIO implements GameIO {
     
     @Override
     public void print(String message) {
+        // 检查连接状态（包括ClientHandler的状态）
+        if (!clientHandler.isConnected()) {
+            connected = false;
+            return;
+        }
+        
         if (connected && !timedOut) {
-            clientHandler.sendMessage(new GameMessage(MessageType.DISPLAY_TEXT, message));
+            try {
+                clientHandler.sendMessage(new GameMessage(MessageType.DISPLAY_TEXT, message));
+                // 发送后再次检查连接状态（sendMessage可能会设置connected=false）
+                if (!clientHandler.isConnected()) {
+                    connected = false;
+                }
+            } catch (Exception e) {
+                // 发送消息失败，但不立即标记为断开连接（可能是临时错误）
+                System.err.println("NetworkConsoleIO.print 发送消息失败: " + e.getMessage());
+                // 只有在确认连接已断开时才标记为断开
+                if (!clientHandler.isConnected()) {
+                    connected = false;
+                }
+                // 如果是Socket异常，可能是连接真的断开了
+                if (e instanceof java.net.SocketException || 
+                    (e.getMessage() != null && (e.getMessage().contains("连接") || 
+                                               e.getMessage().contains("Connection") ||
+                                               e.getMessage().contains("reset") ||
+                                               e.getMessage().contains("abort")))) {
+                    connected = false;
+                }
+            }
         }
     }
     
@@ -68,16 +95,13 @@ public class NetworkConsoleIO implements GameIO {
         // 发送输入提示
         clientHandler.sendMessage(new GameMessage(MessageType.REQUEST_INPUT, prompt));
         
-        // 等待输入（带超时）
         try {
             String input = clientHandler.receiveInput(DEFAULT_TIMEOUT_MS);
             if (input == null) {
-                // 超时，发送警告
+                // 初次等待超时，发送提示再给一次机会
                 handleTimeout();
-                // 再等待一段时间
                 input = clientHandler.receiveInput(WARNING_TIMEOUT_MS);
                 if (input == null) {
-                    // 仍然超时，标记为超时
                     markTimedOut();
                     return "";
                 }
@@ -117,16 +141,36 @@ public class NetworkConsoleIO implements GameIO {
             try {
                 // 将提示作为 readInput 的参数，这样提示会通过 REQUEST_INPUT 消息一起发送
                 String input = readInput(prompt);
-                if (input.isEmpty() && timedOut) {
-                    return min;  // 超时返回最小值
+                
+                // 检查连接状态
+                if (!connected || timedOut) {
+                    return min;  // 超时或断开，返回最小值
                 }
-                int inputValue = Integer.parseInt(input);
+                
+                // 如果输入为空，提示并重新输入
+                if (input == null || input.trim().isEmpty()) {
+                    printErrorMessage("输入不能为空，请输入" + min + "-" + max + "之间的数字");
+                    continue; // 重新输入
+                }
+                
+                // 尝试解析为整数
+                int inputValue;
+                try {
+                    inputValue = Integer.parseInt(input.trim());
+                } catch (NumberFormatException e) {
+                    printErrorMessage("请输入有效的数字（" + min + "-" + max + "）");
+                    continue; // 重新输入
+                }
+                
+                // 检查范围
                 if (inputValue >= min && inputValue <= max) {
                     return inputValue;
+                } else {
+                    printErrorMessage("请输入" + min + "-" + max + "之间的数字");
                 }
-                printErrorMessage("请输入" + min + "-" + max + "之间的数字");
-            } catch (NumberFormatException e) {
-                printErrorMessage("请输入有效的数字");
+            } catch (Exception e) {
+                // 其他异常，提示并重新输入
+                printErrorMessage("输入错误，请重新输入（" + min + "-" + max + "）");
             }
         }
     }
@@ -209,8 +253,7 @@ public class NetworkConsoleIO implements GameIO {
         printMessage("2. 去后山练功");
         printMessage("3. 下山找人切磋（NPC）");
         printMessage("4. 进入决斗池（PvP）");
-        printMessage("5. 保存并退出");
-        printMessage("6. 退出游戏");
+        printMessage("5. 退出游戏（可选择保存）");
     }
     
     @Override

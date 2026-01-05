@@ -3,6 +3,7 @@ package main.server;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 用户数据类
@@ -11,17 +12,17 @@ import java.util.List;
 public class UserData implements Serializable {
     private static final long serialVersionUID = 1L;
     
-    private String username;
-    private String passwordHash;  // 密码哈希值
-    private String salt;          // 密码盐值
-    private List<String> playerNames;  // 该用户绑定的玩家名列表
-    private long lastLoginTime;   // 最后登录时间
+    private final String username;  // final 保证不可变
+    private final String passwordHash;  // 密码哈希值，final 保证不可变
+    private final String salt;          // 密码盐值，final 保证不可变
+    private final List<String> playerNames;  // 该用户绑定的玩家名列表，使用线程安全的列表
+    private volatile long lastLoginTime;   // 最后登录时间，使用 volatile 保证可见性
     
     public UserData(String username, String passwordHash, String salt) {
         this.username = username;
         this.passwordHash = passwordHash;
         this.salt = salt;
-        this.playerNames = new ArrayList<>();
+        this.playerNames = new CopyOnWriteArrayList<>();  // 线程安全的列表
         this.lastLoginTime = System.currentTimeMillis();
     }
     
@@ -38,17 +39,17 @@ public class UserData implements Serializable {
     }
     
     public List<String> getPlayerNames() {
-        return new ArrayList<>(playerNames);
+        return new ArrayList<>(playerNames);  // 返回副本，保证线程安全
     }
     
     public void addPlayerName(String playerName) {
         if (!playerNames.contains(playerName)) {
-            playerNames.add(playerName);
+            playerNames.add(playerName);  // CopyOnWriteArrayList 是线程安全的
         }
     }
     
     public void removePlayerName(String playerName) {
-        playerNames.remove(playerName);
+        playerNames.remove(playerName);  // CopyOnWriteArrayList 是线程安全的
     }
     
     public long getLastLoginTime() {

@@ -12,14 +12,15 @@ public class Arena {
     private final MultiPlayerManager playerManager;
     private final Map<String, GameIO> playerIOs;
     private final GameIO defaultIO;
-    private List<Player> participants;
-    private boolean active;
+    private final List<Player> participants;  // 使用线程安全的列表
+    private volatile boolean active;  // 使用 volatile 保证可见性
+    private final Object participantsLock = new Object();  // 用于同步 participants 的修改
 
     public Arena(MultiPlayerManager playerManager, Map<String, GameIO> playerIOs, GameIO defaultIO) {
         this.playerManager = playerManager;
         this.playerIOs = playerIOs;
         this.defaultIO = defaultIO;
-        this.participants = new ArrayList<>();
+        this.participants = new CopyOnWriteArrayList<>();  // 线程安全的列表
         this.active = false;
     }
 
@@ -42,7 +43,10 @@ public class Arena {
         }
 
         // 所有人类玩家自动参加
-        participants = new ArrayList<>(humanPlayers);
+        synchronized (participantsLock) {
+            participants.clear();
+            participants.addAll(humanPlayers);
+        }
         active = true;
 
         broadcastMessage("\n===== 决斗池开始 =====");
@@ -61,12 +65,22 @@ public class Arena {
      * 向所有参与者广播消息
      */
     private void broadcastMessage(String message) {
-        for (Player player : participants) {
-            GameIO playerIO = playerIOs.get(player.getName());
-            if (playerIO != null) {
-                playerIO.println(message);
-            } else if (defaultIO != null) {
-                defaultIO.println("[广播到 " + player.getName() + "] " + message);
+        // 创建快照以避免并发修改异常
+        List<Player> snapshot;
+        synchronized (participantsLock) {
+            snapshot = new ArrayList<>(participants);
+        }
+        for (Player player : snapshot) {
+            try {
+                GameIO playerIO = playerIOs.get(player.getName());
+                if (playerIO != null) {
+                    playerIO.println(message);
+                } else if (defaultIO != null) {
+                    defaultIO.println("[广播到 " + player.getName() + "] " + message);
+                }
+            } catch (Exception e) {
+                // 发送消息失败，继续处理其他玩家
+                System.err.println("向玩家 " + player.getName() + " 广播消息失败: " + e.getMessage());
             }
         }
     }
@@ -144,7 +158,9 @@ public class Arena {
 
             if (!target.getStats().isAlive()) {
                 broadcastMessage(target.getName() + " 被击败了！");
-                participants.remove(target);
+                synchronized (participantsLock) {
+                    participants.remove(target);
+                }
             }
         }
     }
@@ -176,7 +192,9 @@ public class Arena {
             broadcastMessage("\n决斗池结束，没有明确的胜利者。");
         }
 
-        participants.clear();
+        synchronized (participantsLock) {
+            participants.clear();
+        }
     }
 
     /**
@@ -186,7 +204,9 @@ public class Arena {
         if (active) {
             broadcastMessage("决斗池被取消了。");
             active = false;
-            participants.clear();
+            synchronized (participantsLock) {
+                participants.clear();
+            }
         }
     }
 
@@ -194,6 +214,6 @@ public class Arena {
      * 检查是否正在进行决斗
      */
     public boolean isActive() {
-        return active;
+        return active;  // volatile 变量，线程安全
     }
 }

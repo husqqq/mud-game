@@ -215,7 +215,7 @@ public class PvPBattleService {
     /**
      * 获取AI选择的招式（用于被AI接管的玩家）
      */
-    private SkillType getAiSkillChoice(Player player) {
+    public SkillType getAiSkillChoice(Player player) {
         // 使用和NPC相同的技能选择逻辑（根据技能熟练度）
         SkillType mainStyle = player.getMainStyle();
         int mainLevel = player.getSkillLevel(mainStyle);
@@ -247,7 +247,7 @@ public class PvPBattleService {
     /**
      * 获取玩家选择的招式
      */
-    private SkillType getPlayerSkillChoice(Player player, GameIO playerIO) {
+    public SkillType getPlayerSkillChoice(Player player, GameIO playerIO) {
         playerIO.println("\n" + player.getName() + " 请选择你的招式：");
         
         // 显示已掌握的技能
@@ -292,7 +292,7 @@ public class PvPBattleService {
     /**
      * 执行PvP攻击
      */
-    private void executePvPAttack(Player attacker, Player defender, SkillType skillUsed, GameIO attackerIO, GameIO defenderIO) {
+    public void executePvPAttack(Player attacker, Player defender, SkillType skillUsed, GameIO attackerIO, GameIO defenderIO) {
         // 保存原始技能
         Skill originalSkill = attacker.getMainSkill();
         
@@ -307,23 +307,38 @@ public class PvPBattleService {
         int damage = attacker.attack(defender);
         String skillName = skillUsed.getName();
         
-        // 向两个玩家都显示战斗效果
-        attackerIO.printBattleEffect(
-            attacker.getName(),
-            skillName,
-            defender.getName(),
-            damage,
-            isCritical,
-            isCounter
-        );
-        defenderIO.printBattleEffect(
-            attacker.getName(),
-            skillName,
-            defender.getName(),
-            damage,
-            isCritical,
-            isCounter
-        );
+        // 向两个玩家都显示战斗效果（使用try-catch保护，确保即使一个玩家断开也不影响另一个）
+        try {
+            if (attackerIO.isConnected() && !attackerIO.isTimedOut()) {
+                attackerIO.printBattleEffect(
+                    attacker.getName(),
+                    skillName,
+                    defender.getName(),
+                    damage,
+                    isCritical,
+                    isCounter
+                );
+            }
+        } catch (Exception e) {
+            // 发送给攻击者的消息失败，但不影响战斗
+            System.err.println("向攻击者发送战斗效果失败: " + e.getMessage());
+        }
+        
+        try {
+            if (defenderIO.isConnected() && !defenderIO.isTimedOut()) {
+                defenderIO.printBattleEffect(
+                    attacker.getName(),
+                    skillName,
+                    defender.getName(),
+                    damage,
+                    isCritical,
+                    isCounter
+                );
+            }
+        } catch (Exception e) {
+            // 发送给防御者的消息失败，但不影响战斗
+            System.err.println("向防御者发送战斗效果失败: " + e.getMessage());
+        }
         
         // 恢复原始技能
         attacker.setMainSkill(originalSkill);
@@ -408,7 +423,8 @@ public class PvPBattleService {
      */
     private void applyPvPWinReward(Player winner) {
         // PvP胜利奖励：随机增加1-2点属性
-        int randomPoints = RandomUtils.getRandomInt(1, 2);
+        // 提高奖励：随机增加3-5点属性
+        int randomPoints = RandomUtils.getRandomInt(3, 5);
         winner.getStats().addRandomAttribute(randomPoints);
         winner.recalcPower();
         getPlayerIO(winner.getName()).println(winner.getName() + " 获得了 " + randomPoints + " 点属性奖励！");

@@ -34,7 +34,7 @@ public class GameServer {
     private final Map<String, GameIO> playerIOs;  // 玩家名 -> NetworkConsoleIO
     private MultiPlayerGame game;
     private ServerSocket serverSocket;
-    private boolean running;
+    private volatile boolean running;  // 使用 volatile 保证可见性
     
     public GameServer(String host, int port, int expectedPlayerCount) {
         this.host = host != null ? host : DEFAULT_HOST;
