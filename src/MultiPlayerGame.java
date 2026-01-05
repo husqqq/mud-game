@@ -456,11 +456,11 @@ public class MultiPlayerGame {
             io.printMessage("\n===== 决斗池 =====");
             io.printMessage("只有你一个人进入了决斗池，你自动获胜！");
             
-            // 给予胜利奖励
-            int rewardPoints = main.RandomUtils.getRandomInt(1, 2);
+            // 给予胜利奖励（决斗池胜利奖励：3-7点属性）
+            int rewardPoints = main.RandomUtils.getRandomInt(3, 7);
             soloPlayer.getStats().addRandomAttribute(rewardPoints);
             soloPlayer.recalcPower();
-            io.printMessage("获得奖励：" + rewardPoints + "点属性");
+            io.printMessage("获得奖励：" + rewardPoints + " 点属性");
             soloPlayer.incrementRound();
             
             // 清空决斗池参与者
@@ -737,11 +737,11 @@ public class MultiPlayerGame {
                 winnerIO.printMessage("\n===== 决斗池结束 =====");
                 winnerIO.printMessage("恭喜！" + winner.getName() + " 是最后的胜利者！");
                 
-                // 胜利奖励
-                int rewardPoints = main.RandomUtils.getRandomInt(1, 2);
+                // 胜利奖励（决斗池胜利奖励：3-7点属性）
+                int rewardPoints = main.RandomUtils.getRandomInt(3, 7);
                 winner.getStats().addRandomAttribute(rewardPoints);
                 winner.recalcPower();
-                winnerIO.printMessage("获得奖励：" + rewardPoints + "点属性");
+                winnerIO.printMessage("获得奖励：" + rewardPoints + " 点属性");
                 winner.incrementRound();
             } catch (Exception e) {
                 defaultIO.printErrorMessage("向胜利者发送消息失败: " + e.getMessage());
