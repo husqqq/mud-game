@@ -70,6 +70,18 @@ public class MultiPlayerManager {
     }
     
     /**
+     * 根据玩家名获取玩家对象
+     */
+    public Player getPlayer(String playerName) {
+        rwLock.readLock().lock();
+        try {
+            return playerMap.get(playerName);
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
+    
+    /**
      * 获取玩家（不包括自己，但包括AI接管的玩家，用于决斗池）
      */
     public List<Player> getOtherPlayers(String currentPlayerName) {

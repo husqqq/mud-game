@@ -80,7 +80,7 @@ public class NpcFactory {
         luk = (int) (luk * difficulty.getStatsMultiplier() * 0.6);
         
         // 计算防御值（基于难度）
-        int def = baseValue;
+        int def = baseAttribute + RandomUtils.getRandomInt(-2, 3);
         def = (int) (def * difficulty.getStatsMultiplier() * 0.8);
         
         // 每个NPC都有一个主属性，会额外增加
