@@ -199,8 +199,9 @@ public class GameClient {
                 }
                 
                 System.out.print(message.getData());
-                // 检查是否是"按回车键继续"的提示，如果是则允许空输入
-                boolean allowEmpty = message.getData().contains("按回车键继续");
+                // 检查是否允许空输入：包含“按回车”/“回车默认”/“回车平均”等提示时允许空输入
+                String prompt = message.getData();
+                boolean allowEmpty = prompt.contains("按回车") || prompt.contains("回车默认") || prompt.contains("回车平均");
                 
                 // 循环读取输入
                 while (connected.get() && running.get()) {

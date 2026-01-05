@@ -104,8 +104,9 @@ public class ConsoleIO implements GameIO {
     
     @Override
     public boolean confirmAction(String prompt) {
-        String input = readInput(prompt);
-        return input.equalsIgnoreCase("y") || input.equalsIgnoreCase("yes");
+        System.out.print(prompt);
+        String input = scanner.nextLine().trim().toLowerCase();
+        return input.isEmpty() || input.equals("y") || input.equals("yes");
     }
 
     @Override

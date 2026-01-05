@@ -422,9 +422,8 @@ public class PvPBattleService {
      * 应用PvP胜利奖励
      */
     private void applyPvPWinReward(Player winner) {
-        // PvP胜利奖励：随机增加1-2点属性
-        // 提高奖励：随机增加3-5点属性
-        int randomPoints = RandomUtils.getRandomInt(3, 5);
+        // PvP胜利奖励：提高为随机增加3-7点属性，保底3点
+        int randomPoints = RandomUtils.getRandomInt(3, 7);
         winner.getStats().addRandomAttribute(randomPoints);
         winner.recalcPower();
         getPlayerIO(winner.getName()).println(winner.getName() + " 获得了 " + randomPoints + " 点属性奖励！");
@@ -438,6 +437,12 @@ public class PvPBattleService {
         int penaltyPoints = RandomUtils.getRandomInt(5, 10);
         loser.getStats().addRandomAttribute(-penaltyPoints);
         loser.recalcPower();
+        
+        // 战败恢复：保底恢复1点生命值，确保能继续游戏
+        if (!loser.isAlive()) {
+            loser.getStats().setHpCurrent(1);
+        }
+        
         getPlayerIO(loser.getName()).println(loser.getName() + " 失败惩罚：损失了" + penaltyPoints + "点属性");
     }
 }

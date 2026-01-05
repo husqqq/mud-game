@@ -40,8 +40,8 @@ public class Game {
         }
 
         consoleIO.printMessage("欢迎来到武侠世界，" + player.getName() + "！");
-        consoleIO.printMessage("游戏目标：通过不断修炼和战斗，提升战力，最终成为武林至尊！");
-        consoleIO.printMessage("注意：游戏没有固定的胜利条件，你可以无限进行下去。");
+        consoleIO.printMessage("游戏目标：在 100 回合内战力达到 1200 分，最终成为武林至尊！");
+        consoleIO.printMessage("当前回合: " + player.getRoundCount() + "/100");
         consoleIO.waitForEnter();
 
         // 进入主循环
@@ -87,15 +87,16 @@ public class Game {
         consoleIO.printTitle("创建新角色");
 
         // 输入角色名
-        consoleIO.println("请输入角色名：");
+        consoleIO.println("请输入角色名 (回车默认: 侠客)：");
         String name = consoleIO.readLine().trim();
         if (name.isEmpty()) {
             name = "侠客";
         }
 
         // 分配属性点
-        consoleIO.println("\n你有5点属性可以自由分配，每项基础为10点。");
+        consoleIO.println("\n你有 5 点属性可以自由分配 (每项基础为 10 点)。");
         consoleIO.println("属性包括：力量(STR)、敏捷(AGI)、体质(CON)、智力(INT)、运气(LUK)");
+        consoleIO.println("直接回车将平均分配剩余点数。");
 
         Stats stats = allocateAttributes();
 
@@ -105,8 +106,19 @@ public class Game {
         consoleIO.println("2. 剑法 (SWORD)");
         consoleIO.println("3. 拳法 (FIST)");
 
-        int choice = consoleIO.readChoice(3, "请选择 (1-3): ");
-        SkillType mainStyle = SkillType.values()[choice - 1];
+        consoleIO.print("请选择 (1-3，回车默认 2: 剑法): ");
+        String skillInput = consoleIO.readLine().trim();
+        int skillChoice = 2;
+        if (!skillInput.isEmpty()) {
+            try {
+                skillChoice = Integer.parseInt(skillInput);
+            } catch (NumberFormatException e) {
+                skillChoice = 2;
+            }
+        }
+        if (skillChoice < 1 || skillChoice > 3) skillChoice = 2;
+        
+        SkillType mainStyle = SkillType.values()[skillChoice - 1];
 
         // 创建玩家
         Player newPlayer = new Player(name, "SINGLE_" + name, stats, mainStyle);
@@ -152,16 +164,47 @@ public class Game {
         showAttributeStatus(str, agi, con, intel, luk, remainingPoints);
 
         while (remainingPoints > 0) {
-            consoleIO.println("\n请输入要加点的属性名 (str/agi/con/int/luk)：");
+            consoleIO.println("\n请输入要加点的属性名 (str/agi/con/int/luk)，直接回车将平均分配剩余点数：");
             String input = consoleIO.readLine().toLowerCase().trim();
+
+            if (input.isEmpty()) {
+                // 平均分配剩余点数
+                int share = remainingPoints / 5;
+                int extra = remainingPoints % 5;
+                str += share;
+                agi += share;
+                con += share;
+                intel += share;
+                luk += share;
+                
+                // 剩余的一点点补在前面的属性上
+                if (extra > 0) str++;
+                if (extra > 1) agi++;
+                if (extra > 2) con++;
+                if (extra > 3) intel++;
+                
+                remainingPoints = 0;
+                break;
+            }
 
             if (input.equals("done")) {
                 consoleIO.println("还有 " + remainingPoints + " 点属性未分配，请先分配完所有属性点！");
                 continue;
             }
 
-            consoleIO.println("要增加多少点？(1-" + remainingPoints + ")");
-            int pointsToAdd = consoleIO.readIntInput("请输入: ", 1, remainingPoints);
+            consoleIO.println("要增加多少点？(1-" + remainingPoints + "，回车默认 1)");
+            String ptsInput = consoleIO.readLine().trim();
+            int pointsToAdd = 1;
+            if (!ptsInput.isEmpty()) {
+                try {
+                    pointsToAdd = Integer.parseInt(ptsInput);
+                } catch (NumberFormatException e) {
+                    pointsToAdd = 1;
+                }
+            }
+
+            if (pointsToAdd < 1) pointsToAdd = 1;
+            if (pointsToAdd > remainingPoints) pointsToAdd = remainingPoints;
 
             switch (input) {
                 case "str":
@@ -209,8 +252,23 @@ public class Game {
      */
     private void mainLoop() {
         while (isRunning && player.getStats().isAlive()) {
+            // 检查胜利/失败条件
+            if (player.getRoundCount() >= 100) {
+                consoleIO.printSeparator();
+                if (player.getPower() >= 1200) {
+                    consoleIO.println("恭喜你！在 100 回合内达到了 " + player.getPower() + " 战力，达成了武林至尊目标！");
+                    consoleIO.println("你赢得了游戏的最终胜利！");
+                } else {
+                    consoleIO.println("游戏结束：你已达到 100 回合，但战力仅为 " + player.getPower() + "，未能达到 1200 分。");
+                    consoleIO.println("再接再厉，下次更强！");
+                }
+                consoleIO.printSeparator();
+                isRunning = false;
+                break;
+            }
+
             consoleIO.printMainMenu();
-            int choice = consoleIO.readChoice(6, "请选择操作 (1-6): ");
+            int choice = consoleIO.readChoice(5, "请选择操作 (1-5): ");
 
             switch (choice) {
                 case 1:
@@ -226,19 +284,33 @@ public class Game {
                     goPvPBattle();
                     break;
                 case 5:
-                    saveAndExit();
-                    return;
-                case 6:
-                    exitGame();
+                    exitGameWithSave();
                     return;
                 default:
                     consoleIO.printErrorMessage("无效的选择");
             }
         }
 
-        if (!player.getStats().isAlive()) {
+        if (player != null && !player.getStats().isAlive()) {
             consoleIO.println("\n" + player.getName() + " 已经死亡，游戏结束！");
         }
+    }
+
+    /**
+     * 退出游戏（可选保存）
+     */
+    private void exitGameWithSave() {
+        consoleIO.println("\n选择退出游戏");
+        if (consoleIO.confirmAction("是否保存当前进度？(y/n, 回车默认保存): ")) {
+            try {
+                saveLoadService.save(player);
+                consoleIO.printSuccessMessage("角色已保存！");
+            } catch (Exception e) {
+                consoleIO.printErrorMessage("保存失败：" + e.getMessage());
+            }
+        }
+        consoleIO.println("感谢游玩，再见！");
+        isRunning = false;
     }
 
     /**
@@ -303,23 +375,4 @@ public class Game {
         consoleIO.waitForEnter();
     }
 
-    /**
-     * 保存并退出
-     */
-    private void saveAndExit() {
-        try {
-            saveLoadService.save(player);
-            consoleIO.println("角色已保存！");
-        } catch (Exception e) {
-            consoleIO.printErrorMessage("保存失败：" + e.getMessage());
-        }
-        consoleIO.println("感谢游玩，再见！");
-    }
-
-    /**
-     * 退出游戏
-     */
-    private void exitGame() {
-        consoleIO.println("感谢游玩，再见！");
-    }
 }
