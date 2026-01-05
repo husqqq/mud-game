@@ -572,29 +572,22 @@ public class ClientHandler extends Thread {
             }
             String attr = attrMsg.getData().trim().toLowerCase();
             if (attr.isEmpty()) {
-                // 平均分配剩余点数
-                int share = remaining / 6;
-                int extra = remaining % 6;
-                str += share;
-                agi += share;
-                con += share;
-                intel += share;
-                luk += share;
-                def += share;
-                int[] extras = {0, 1, 2, 3, 4, 5};
-                for (int i = 0; i < extra; i++) {
-                    switch (extras[i]) {
+                // 随机分配剩余点数到6个属性上
+                sendMessage(new GameMessage(MessageType.DISPLAY_TEXT, 
+                    "正在随机分配剩余的 " + remaining + " 点属性..."));
+                for (int i = 0; i < remaining; i++) {
+                    int randomAttr = new java.util.Random().nextInt(6);
+                    switch (randomAttr) {
                         case 0 -> str++;
                         case 1 -> agi++;
                         case 2 -> con++;
                         case 3 -> intel++;
                         case 4 -> luk++;
                         case 5 -> def++;
-                        default -> {
-                        }
                     }
                 }
                 remaining = 0;
+                sendMessage(new GameMessage(MessageType.DISPLAY_TEXT, "分配完成！"));
                 break;
             }
 
@@ -665,7 +658,7 @@ public class ClientHandler extends Thread {
 
     private void showAttributeStatus(int str, int agi, int con, int intel, int luk, int def, int remaining) {
         sendMessage(new GameMessage(MessageType.DISPLAY_TEXT,
-            "STR = " + str + " (力量)\n" +
+            "\nSTR = " + str + " (力量)\n" +
             "AGI = " + agi + " (敏捷)\n" +
             "CON = " + con + " (体质)\n" +
             "INT = " + intel + " (智力)\n" +

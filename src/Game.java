@@ -169,25 +169,21 @@ public class Game {
             String input = consoleIO.readLine().toLowerCase().trim();
 
             if (input.isEmpty()) {
-                // 平均分配剩余点数
-                int share = remainingPoints / 6;
-                int extra = remainingPoints % 6;
-                str += share;
-                agi += share;
-                con += share;
-                intel += share;
-                luk += share;
-                def += share;
-                
-                // 剩余的一点点补在前面的属性上
-                if (extra > 0) str++;
-                if (extra > 1) agi++;
-                if (extra > 2) con++;
-                if (extra > 3) intel++;
-                if (extra > 4) luk++;
-                if (extra > 5) def++;
-                
+                // 随机分配剩余点数到6个属性上
+                consoleIO.println("正在随机分配剩余的 " + remainingPoints + " 点属性...");
+                for (int i = 0; i < remainingPoints; i++) {
+                    int randomAttr = new java.util.Random().nextInt(6);
+                    switch (randomAttr) {
+                        case 0: str++; break;
+                        case 1: agi++; break;
+                        case 2: con++; break;
+                        case 3: intel++; break;
+                        case 4: luk++; break;
+                        case 5: def++; break;
+                    }
+                }
                 remainingPoints = 0;
+                consoleIO.println("分配完成！");
                 break;
             }
 
@@ -246,7 +242,7 @@ public class Game {
      * 显示属性状态
      */
     private void showAttributeStatus(int str, int agi, int con, int intel, int luk, int def, int remaining) {
-        consoleIO.println("STR = " + str + " (力量)");
+        consoleIO.println("\nSTR = " + str + " (力量)");
         consoleIO.println("AGI = " + agi + " (敏捷)");
         consoleIO.println("CON = " + con + " (体质)");
         consoleIO.println("INT = " + intel + " (智力)");

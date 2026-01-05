@@ -79,9 +79,13 @@ public class NpcFactory {
         intel = (int) (intel * difficulty.getStatsMultiplier() * 0.6);
         luk = (int) (luk * difficulty.getStatsMultiplier() * 0.6);
         
+        // 计算防御值（基于难度）
+        int def = baseValue;
+        def = (int) (def * difficulty.getStatsMultiplier() * 0.8);
+        
         // 每个NPC都有一个主属性，会额外增加
-        int[] attributes = {str, agi, con, intel, luk};
-        int mainAttributeIndex = RandomUtils.getRandomInt(0, 4);
+        int[] attributes = {str, agi, con, intel, luk, def};
+        int mainAttributeIndex = RandomUtils.getRandomInt(0, 5);
         attributes[mainAttributeIndex] += RandomUtils.getRandomInt(2, 5);
         
         // 创建Stats对象
@@ -90,7 +94,8 @@ public class NpcFactory {
             attributes[1], // agi
             attributes[2], // con
             attributes[3], // intel
-            attributes[4]  // luk
+            attributes[4], // luk
+            attributes[5]  // def
         );
         
         // 重新计算最大生命值
