@@ -1,5 +1,9 @@
 package test;
 
+import main.network.GameMessage;
+import main.network.MessageSerializer;
+import main.network.MessageType;
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -167,14 +171,17 @@ public class MultiPlayerStressTest {
             // 连接服务器
             connect();
             
-            // 注册
+            // 注册（注册成功后服务器会自动登录）
             register();
-            
-            // 登录
-            login();
+            Thread.sleep(1000); // 等待认证完成
             
             // 创建角色
             createCharacter();
+            Thread.sleep(1000); // 等待角色创建完成
+            
+            // 等待游戏开始
+            System.out.println("[客户端 " + clientId + "] 等待游戏开始...");
+            Thread.sleep(3000);
             
             // 模拟游戏操作
             performGameActions();
@@ -203,39 +210,38 @@ public class MultiPlayerStressTest {
         private void receiveMessages() {
             try {
                 while (!socket.isClosed()) {
-                    // 简化接收逻辑，直接读取字节
-                    Thread.sleep(100);
+                    // 使用正确的协议接收GameMessage
+                    if (MessageSerializer.hasData(in)) {
+                        GameMessage message = MessageSerializer.deserialize(in);
+                        handleMessage(message);
+                    } else {
+                        Thread.sleep(50);
+                    }
                 }
             } catch (Exception e) {
-                // 忽略接收错误
+                // 连接关闭或其他错误，忽略
             }
         }
         
-        private void handleMessage(String message) {
+        private void handleMessage(GameMessage message) {
             // 简单日志输出
-            if (message.contains("ERROR") || message.contains("错误")) {
-                System.err.println("[客户端 " + clientId + "] 收到错误: " + message);
+            String data = message.getData();
+            if (message.getType() == MessageType.ERROR || 
+                (data != null && (data.contains("ERROR") || data.contains("错误")))) {
+                System.err.println("[客户端 " + clientId + "] 收到错误: " + data);
             }
+            // 可以根据需要添加更多消息处理
         }
         
         private void register() throws Exception {
             System.out.println("[客户端 " + clientId + "] 注册账号: " + username);
-            sendMessage("1"); // 选择注册
-            Thread.sleep(300);
-            sendMessage(username);
-            Thread.sleep(300);
-            sendMessage(password);
+            Thread.sleep(500); // 等待服务器发送欢迎消息
+            sendMessage("2"); // 选择注册（不是登录）
             Thread.sleep(500);
-        }
-        
-        private void login() throws Exception {
-            System.out.println("[客户端 " + clientId + "] 登录账号: " + username);
-            sendMessage("2"); // 选择登录
-            Thread.sleep(300);
             sendMessage(username);
-            Thread.sleep(300);
-            sendMessage(password);
             Thread.sleep(500);
+            sendMessage(password);
+            Thread.sleep(1000); // 等待注册完成
         }
         
         private void createCharacter() throws Exception {
@@ -382,8 +388,9 @@ public class MultiPlayerStressTest {
         }
         
         private void sendMessage(String message) throws IOException {
-            // 简单地发送字符串（需要根据实际协议调整）
-            out.writeUTF(message);
+            // 使用正确的协议：发送GameMessage
+            GameMessage msg = new GameMessage(MessageType.USER_INPUT, message);
+            MessageSerializer.serialize(msg, out);
             out.flush();
         }
     }
