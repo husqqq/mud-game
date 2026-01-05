@@ -217,11 +217,19 @@ public class MultiPlayerGame {
         }
         
         try {
-            // 检查超时和连接状态
-            if (io.isTimedOut() || !io.isConnected()) {
-                // 超时或断线，标记为AI接管
+            // 检查超时和连接状态（已暂时注释，用于调试）
+            // if (io.isTimedOut() || !io.isConnected()) {
+            //     // 超时或断线，标记为AI接管
+            //     playerManager.setAiControlled(player.getName(), true);
+            //     defaultIO.printMessage(player.getName() + " 超时或断线，已标记为AI接管");
+            //     markPlayerReady(player);
+            //     return;
+            // }
+            
+            // 仅检查连接状态，不检查超时
+            if (!io.isConnected()) {
                 playerManager.setAiControlled(player.getName(), true);
-                defaultIO.printMessage(player.getName() + " 超时或断线，已标记为AI接管");
+                defaultIO.printMessage(player.getName() + " 连接断开，已标记为AI接管");
                 markPlayerReady(player);
                 return;
             }
@@ -232,10 +240,11 @@ public class MultiPlayerGame {
             boolean turnComplete = false;
             while (!turnComplete && isRunning && !playerManager.isGameEnded()) {
                 try {
-                    // 再次检查连接状态
-                    if (!io.isConnected() || io.isTimedOut()) {
+                    // 再次检查连接状态（超时检测已暂时注释）
+                    // if (!io.isConnected() || io.isTimedOut()) {
+                    if (!io.isConnected()) {
                         playerManager.setAiControlled(player.getName(), true);
-                        defaultIO.printMessage(player.getName() + " 连接断开或超时，已标记为AI接管");
+                        defaultIO.printMessage(player.getName() + " 连接断开，已标记为AI接管");
                         markPlayerReady(player);
                         return;
                     }
@@ -243,13 +252,13 @@ public class MultiPlayerGame {
                     io.printMainMenu();
                     int choice = io.readIntInput("请选择操作: ", 1, 5);
                     
-                    // 检查是否超时
-                    if (io.isTimedOut()) {
-                        playerManager.setAiControlled(player.getName(), true);
-                        defaultIO.printMessage(player.getName() + " 输入超时，已标记为AI接管");
-                        markPlayerReady(player);
-                        return;
-                    }
+                    // 检查是否超时（已暂时注释）
+                    // if (io.isTimedOut()) {
+                    //     playerManager.setAiControlled(player.getName(), true);
+                    //     defaultIO.printMessage(player.getName() + " 输入超时，已标记为AI接管");
+                    //     markPlayerReady(player);
+                    //     return;
+                    // }
                     
                     switch (choice) {
                         case 1:
@@ -456,11 +465,16 @@ public class MultiPlayerGame {
             io.printMessage("\n===== 决斗池 =====");
             io.printMessage("只有你一个人进入了决斗池，你自动获胜！");
             
-            // 给予胜利奖励（决斗池胜利奖励：3-7点属性）
+            // 给予胜利奖励（决斗池胜利奖励：3-7点属性 + 15-25战力）
             int rewardPoints = main.RandomUtils.getRandomInt(3, 7);
             soloPlayer.getStats().addRandomAttribute(rewardPoints);
             soloPlayer.recalcPower();
-            io.printMessage("获得奖励：" + rewardPoints + " 点属性");
+            
+            // PvP额外战力奖励
+            int powerBonus = main.RandomUtils.getRandomInt(15, 25);
+            soloPlayer.setPower(soloPlayer.getPower() + powerBonus);
+            
+            io.printMessage("获得奖励：" + rewardPoints + " 点属性 + " + powerBonus + " 战力");
             soloPlayer.incrementRound();
             
             // 清空决斗池参与者
@@ -737,11 +751,16 @@ public class MultiPlayerGame {
                 winnerIO.printMessage("\n===== 决斗池结束 =====");
                 winnerIO.printMessage("恭喜！" + winner.getName() + " 是最后的胜利者！");
                 
-                // 胜利奖励（决斗池胜利奖励：3-7点属性）
+                // 胜利奖励（决斗池胜利奖励：3-7点属性 + 15-25战力）
                 int rewardPoints = main.RandomUtils.getRandomInt(3, 7);
                 winner.getStats().addRandomAttribute(rewardPoints);
                 winner.recalcPower();
-                winnerIO.printMessage("获得奖励：" + rewardPoints + " 点属性");
+                
+                // PvP额外战力奖励
+                int powerBonus = main.RandomUtils.getRandomInt(15, 25);
+                winner.setPower(winner.getPower() + powerBonus);
+                
+                winnerIO.printMessage("获得奖励：" + rewardPoints + " 点属性 + " + powerBonus + " 战力");
                 winner.incrementRound();
             } catch (Exception e) {
                 defaultIO.printErrorMessage("向胜利者发送消息失败: " + e.getMessage());

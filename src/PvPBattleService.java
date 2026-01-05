@@ -422,11 +422,16 @@ public class PvPBattleService {
      * 应用PvP胜利奖励
      */
     private void applyPvPWinReward(Player winner) {
-        // PvP胜利奖励：提高为随机增加3-7点属性，保底3点
+        // PvP胜利奖励：随机增加3-7点属性 + 15-25战力（最高奖励）
         int randomPoints = RandomUtils.getRandomInt(3, 7);
         winner.getStats().addRandomAttribute(randomPoints);
         winner.recalcPower();
-        getPlayerIO(winner.getName()).println(winner.getName() + " 获得了 " + randomPoints + " 点属性奖励！");
+        
+        // PvP额外战力奖励（高于PvE的5-25战力）
+        int powerBonus = RandomUtils.getRandomInt(15, 25);
+        winner.setPower(winner.getPower() + powerBonus);
+        
+        getPlayerIO(winner.getName()).println(winner.getName() + " 获得了 " + randomPoints + " 点属性 + " + powerBonus + " 战力奖励！");
     }
     
     /**

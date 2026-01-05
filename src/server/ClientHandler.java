@@ -114,7 +114,8 @@ public class ClientHandler extends Thread {
                                 continue;  // 跳过超时检测
                             }
                             
-                            checkHeartbeatTimeout();
+                            // 超时检测已暂时注释（用于调试）
+                            // checkHeartbeatTimeout();
                             Thread.sleep(100);  // 短暂休眠
                         }
                     } catch (IOException e) {
