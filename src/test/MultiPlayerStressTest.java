@@ -15,6 +15,7 @@ public class MultiPlayerStressTest {
     private static final int SERVER_PORT = 12345;
     private static final int MIN_CLIENTS = 2;
     private static final int MAX_CLIENTS = 8;
+    private static final int FIXED_CLIENTS = 8; // 固定创建8个客户端，与服务器设置一致
     
     private static final AtomicInteger successCount = new AtomicInteger(0);
     private static final AtomicInteger errorCount = new AtomicInteger(0);
@@ -40,7 +41,8 @@ public class MultiPlayerStressTest {
         // 运行多轮测试
         int totalRounds = 5;
         for (int round = 1; round <= totalRounds; round++) {
-            int numClients = MIN_CLIENTS + new Random().nextInt(MAX_CLIENTS - MIN_CLIENTS + 1);
+            // 固定创建8个客户端，与服务器设置一致
+            int numClients = FIXED_CLIENTS;
             System.out.println("\n========================================");
             System.out.println("第 " + round + " 轮测试：" + numClients + " 个客户端");
             System.out.println("========================================");
