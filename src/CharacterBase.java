@@ -147,9 +147,9 @@ public abstract class CharacterBase implements Serializable {
             return 0; // 未命中
         }
         
-        // 计算基础伤害
+        // 计算基础伤害（使用新的防御值系统）
         int attack = calcAttack();
-        int defense = target.calcDefense();
+        int defense = target.getStats().getDef(); // 使用防御值而不是计算的防御力
         int baseDamage = Math.max(1, attack - defense);
         
         // 计算是否暴击
@@ -179,13 +179,57 @@ public abstract class CharacterBase implements Serializable {
     }
     
     /**
+     * PvP 战斗中计算受到的伤害（被动防御）
+     * @param attacker 攻击者
+     * @param attackerSkill 攻击者使用的技能
+     * @param defenderSkill 防御者使用的技能（用于判断技能克制）
+     * @return 受到的伤害值
+     */
+    public int calculatePvPDamage(CharacterBase attacker, SkillType attackerSkill, SkillType defenderSkill) {
+        // 计算是否命中
+        int hitRate = attacker.calcHitRate(this);
+        boolean hit = RandomUtils.isSuccess(hitRate);
+        
+        if (!hit) {
+            return 0; // 未命中
+        }
+        
+        // 计算基础伤害
+        int attack = attacker.calcAttack();
+        int defense = this.getStats().getDef(); // 使用防御值
+        int baseDamage = Math.max(1, attack - defense);
+        
+        // 计算是否暴击
+        int critRate = attacker.calcCritRate();
+        boolean crit = RandomUtils.isSuccess(critRate);
+        
+        // 计算最终伤害
+        double damageMultiplier;
+        if (crit) {
+            damageMultiplier = RandomUtils.getCritDamageMultiplier(); // 暴击伤害1.5-2.0倍
+        } else {
+            damageMultiplier = RandomUtils.getNormalDamageMultiplier(); // 普通伤害0.8-1.2倍
+        }
+        
+        // 检查技能克制关系（攻击者的技能克制防御者的技能）
+        double counterMultiplier = 1.0;
+        if (attackerSkill.counters(defenderSkill)) {
+            counterMultiplier = 1.3; // 克制时伤害提升30%
+        }
+        
+        int finalDamage = (int)(baseDamage * damageMultiplier * counterMultiplier);
+        
+        return finalDamage;
+    }
+    
+    /**
      * 获取角色状态描述
      */
     public String getStatus() {
         return name + "\n" +
                 "生命: " + stats.getHpCurrent() + "/" + stats.getHpMax() + "\n" +
                 "攻击: " + calcAttack() + "\n" +
-                "防御: " + calcDefense() + "\n" +
+                "防御: " + stats.getDef() + "\n" +
                 "速度: " + calcSpeed() + "\n" +
                 "主要技能: " + mainSkill.getDisplayName() + "\n";
     }

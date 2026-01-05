@@ -185,6 +185,7 @@ public class ConsoleIO implements GameIO {
         printMessage("\n===== 属性 =====");
         Stats stats = player.getStats();
         printMessage("生命: " + stats.getHpCurrent() + "/" + stats.getHpMax());
+        printMessage("防御: " + stats.getDef());
         printMessage("力量(STR): " + stats.getStr());
         printMessage("敏捷(AGI): " + stats.getAgi());
         printMessage("体质(CON): " + stats.getCon());

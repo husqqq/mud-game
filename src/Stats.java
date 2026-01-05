@@ -10,12 +10,14 @@ public class Stats implements Serializable {
     private static final int BASE_ATTRIBUTE_VALUE = 3;
     private static final int BASE_HP = 50;
     private static final int HP_PER_CON = 2;
+    private static final int DEF_PER_CON = 1; // 每点体质增加1点防御
     
     private int str; // 力量
     private int agi; // 敏捷
     private int con; // 体质
     private int intel; // 智力
     private int luk; // 幸运
+    private int def; // 防御值
     private int hpMax; // 最大生命值
     private int hpCurrent; // 当前生命值
     
@@ -30,6 +32,7 @@ public class Stats implements Serializable {
         this.luk = BASE_ATTRIBUTE_VALUE;
         this.hpMax = calculateMaxHP(con);
         this.hpCurrent = hpMax;
+        this.def = calculateDef(con);
     }
     
     /**
@@ -43,6 +46,7 @@ public class Stats implements Serializable {
         this.luk = luk;
         this.hpMax = calculateMaxHP(con);
         this.hpCurrent = hpMax;
+        this.def = calculateDef(con);
     }
     
     /**
@@ -52,12 +56,23 @@ public class Stats implements Serializable {
         return BASE_HP + con * HP_PER_CON;
     }
     
+    /**
+     * 计算防御值（基于体质）
+     */
+    private int calculateDef(int con) {
+        return con * DEF_PER_CON;
+    }
+    
     public void recalcHpMax() {
         this.hpMax = calculateMaxHP(con);
         // 如果当前生命值超过最大值，则重置为最大值
         if (hpCurrent > hpMax) {
             hpCurrent = hpMax;
         }
+    }
+    
+    public void recalcDef() {
+        this.def = calculateDef(con);
     }
     
     /**
@@ -179,11 +194,21 @@ public class Stats implements Serializable {
     public void setCon(int con) {
         this.con = con;
         recalcHpMax(); // 体质改变时重新计算最大生命值
+        recalcDef(); // 体质改变时重新计算防御值
     }
     
     public void addCon(int value) {
         this.con += value;
         recalcHpMax(); // 体质改变时重新计算最大生命值
+        recalcDef(); // 体质改变时重新计算防御值
+    }
+    
+    public int getDef() {
+        return def;
+    }
+    
+    public void setDef(int def) {
+        this.def = def;
     }
     
     public int getIntel() {
@@ -238,6 +263,7 @@ public class Stats implements Serializable {
             case 2: 
                 con = Math.max(1, con + points);
                 recalcHpMax(); // 体质改变时需要重新计算生命值
+                recalcDef(); // 体质改变时需要重新计算防御值
                 break;
             case 3: 
                 intel = Math.max(1, intel + points);
@@ -249,6 +275,7 @@ public class Stats implements Serializable {
         // 如果体质改变，已经在上面重新计算了，否则这里重新计算
         if (attributeIndex != 2) {
             recalcHpMax();
+            recalcDef();
         }
     }
     
