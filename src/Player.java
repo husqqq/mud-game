@@ -235,6 +235,10 @@ public class Player extends CharacterBase implements Serializable {
         return power;
     }
     
+    public void setPower(int power) {
+        this.power = power;
+    }
+    
     public String getTitle() {
         return title;
     }
