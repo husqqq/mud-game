@@ -150,7 +150,7 @@ public abstract class CharacterBase implements Serializable {
         // 计算基础伤害（使用新的防御值系统）
         int attack = calcAttack();
         int defense = target.getStats().getDef(); // 使用防御值而不是计算的防御力
-        int baseDamage = Math.max(1, attack - defense);
+        int baseDamage = Math.max(1, (attack - defense) / 2); // 基础伤害减半
         
         // 计算是否暴击
         int critRate = calcCritRate();
@@ -197,7 +197,7 @@ public abstract class CharacterBase implements Serializable {
         // 计算基础伤害
         int attack = attacker.calcAttack();
         int defense = this.getStats().getDef(); // 使用防御值
-        int baseDamage = Math.max(1, attack - defense);
+        int baseDamage = Math.max(1, (attack - defense) / 2); // 基础伤害减半
         
         // 计算是否暴击
         int critRate = attacker.calcCritRate();
