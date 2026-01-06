@@ -37,12 +37,12 @@ public enum SkillType implements Serializable {
     
     /**
      * 判断是否克制另一个技能类型
-     * 剑克刀，刀克拳，拳克剑
+     * 剑克拳，拳克刀，刀克剑
      */
     public boolean counters(SkillType other) {
-        if (this == SABER && other == FIST) return true;
-        if (this == SWORD && other == SABER) return true;
-        return this == FIST && other == SWORD;
+        if (this == SWORD && other == FIST) return true;   // 剑克拳
+        if (this == FIST && other == SABER) return true;   // 拳克刀
+        return this == SABER && other == SWORD;            // 刀克剑
     }
     
     /**
@@ -50,9 +50,9 @@ public enum SkillType implements Serializable {
      */
     public String getCounterDescription() {
         return switch (this) {
-            case SABER -> "刀克拳";
-            case SWORD -> "剑克刀";
-            case FIST -> "拳克剑";
+            case SWORD -> "剑克拳";
+            case FIST -> "拳克刀";
+            case SABER -> "刀克剑";
             default -> "";
         };
     }

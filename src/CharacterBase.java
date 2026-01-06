@@ -68,7 +68,11 @@ public abstract class CharacterBase implements Serializable {
     }
     
     public int calcAttack() {
-        return calculateBaseAttack(stats.getStr(), mainSkill.getAttackBonus());
+        int baseAttack = calculateBaseAttack(stats.getStr(), mainSkill.getAttackBonus());
+        // 攻击力受当前血量影响（血量越低攻击越低）
+        double hpRatio = (double) stats.getHpCurrent() / stats.getHpMax();
+        double attackMultiplier = 0.5 + (hpRatio * 0.5); // 残血时攻击力为50%-100%
+        return (int) (baseAttack * attackMultiplier);
     }
     
     /**
@@ -149,8 +153,11 @@ public abstract class CharacterBase implements Serializable {
         
         // 计算基础伤害（使用新的防御值系统）
         int attack = calcAttack();
-        int defense = target.getStats().getDef(); // 使用防御值而不是计算的防御力
-        int baseDamage = Math.max(1, (attack - defense) / 2); // 基础伤害减半
+        int defense = target.getStats().getDef();
+        
+        // 防御力提供更强的减伤（防御值 * 2）
+        int reducedAttack = Math.max(1, attack - (defense * 2));
+        int baseDamage = reducedAttack / 2; // 基础伤害减半
         
         // 计算是否暴击
         int critRate = calcCritRate();
@@ -167,10 +174,15 @@ public abstract class CharacterBase implements Serializable {
         // 检查技能克制关系
         double counterMultiplier = 1.0;
         if (mainSkill.getType().counters(target.getMainSkill().getType())) {
-            counterMultiplier = 1.3; // 克制时伤害提升30%
+            counterMultiplier = 1.15; // 克制时伤害提升15%
         }
         
         int finalDamage = (int)(baseDamage * damageMultiplier * counterMultiplier);
+        
+        // 限制单次伤害不超过目标35%最大血量（防止瞬秒）
+        int maxDamage = (int)(target.getStats().getHpMax() * 0.35);
+        finalDamage = Math.min(finalDamage, maxDamage);
+        finalDamage = Math.max(1, finalDamage); // 至少造成1点伤害
         
         // 应用伤害
         target.takeDamage(finalDamage);
@@ -196,8 +208,11 @@ public abstract class CharacterBase implements Serializable {
         
         // 计算基础伤害
         int attack = attacker.calcAttack();
-        int defense = this.getStats().getDef(); // 使用防御值
-        int baseDamage = Math.max(1, (attack - defense) / 2); // 基础伤害减半
+        int defense = this.getStats().getDef();
+        
+        // 防御力提供更强的减伤（防御值 * 2）
+        int reducedAttack = Math.max(1, attack - (defense * 2));
+        int baseDamage = reducedAttack / 2; // 基础伤害减半
         
         // 计算是否暴击
         int critRate = attacker.calcCritRate();
@@ -214,10 +229,15 @@ public abstract class CharacterBase implements Serializable {
         // 检查技能克制关系（只在互相攻击时生效，即 defenderSkill 不为 null）
         double counterMultiplier = 1.0;
         if (defenderSkill != null && attackerSkill.counters(defenderSkill)) {
-            counterMultiplier = 1.3; // 克制时伤害提升30%
+            counterMultiplier = 1.15; // 克制时伤害提升15%
         }
         
         int finalDamage = (int)(baseDamage * damageMultiplier * counterMultiplier);
+        
+        // 限制单次伤害不超过目标35%最大血量（防止瞬秒）
+        int maxDamage = (int)(this.getStats().getHpMax() * 0.35);
+        finalDamage = Math.min(finalDamage, maxDamage);
+        finalDamage = Math.max(1, finalDamage); // 至少造成1点伤害
         
         return finalDamage;
     }
