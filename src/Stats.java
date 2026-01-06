@@ -109,6 +109,7 @@ public class Stats implements Serializable {
     
     /**
      * 练功时的血量恢复（有几率恢复更多）
+     * 练功是最佳的回血方式，至少回到80%血量
      * @return 实际恢复的血量
      */
     public int recoverHpFromTraining() {
@@ -116,30 +117,28 @@ public class Stats implements Serializable {
             return 0; // 已经满血，不恢复
         }
         
-        // 先计算基础恢复量（不应用，只计算）
-        double lostHpRatio = (double)(hpMax - hpCurrent) / hpMax;
-        double recoveryCoefficient = 5.0;
-        double logValue = Math.log(1 + lostHpRatio * recoveryCoefficient);
-        int baseRecovery = Math.max(1, hpMax / 20);
-        int calculatedBaseRecovery = (int)(baseRecovery * logValue);
-        int actualBaseRecovery = Math.min(calculatedBaseRecovery, hpMax - hpCurrent);
+        // 计算当前血量百分比
+        double currentHpRatio = (double)hpCurrent / hpMax;
         
-        // 30%几率额外恢复（恢复量为基础恢复的1.5-2倍）
-        int totalRecovery = actualBaseRecovery;
-        if (RandomUtils.isSuccess(30)) {
-            double bonusMultiplier = 1.5 + Math.random() * 0.5; // 1.5-2.0倍
-            int bonusRecovery = (int)(actualBaseRecovery * bonusMultiplier);
-            
-            // 确保不超过最大血量
-            int maxBonusRecovery = hpMax - (hpCurrent + actualBaseRecovery);
-            int actualBonusRecovery = Math.min(bonusRecovery, maxBonusRecovery);
-            totalRecovery += actualBonusRecovery;
+        int totalRecovery;
+        
+        if (currentHpRatio < 0.8) {
+            // 血量低于80%时，至少回到80%
+            int targetHp = (int)(hpMax * 0.8);
+            totalRecovery = targetHp - hpCurrent;
+        } else {
+            // 血量80%以上时，线性增长，大约3次回满
+            // 每次恢复 (100% - 当前%) / 3 的血量
+            double remainingRatio = 1.0 - currentHpRatio;
+            int linearRecovery = (int)(hpMax * remainingRatio / 3.0);
+            totalRecovery = Math.max(1, linearRecovery);
         }
         
         // 应用恢复，确保不超过最大血量
-        hpCurrent = Math.min(hpMax, hpCurrent + totalRecovery);
+        int actualRecovery = Math.min(totalRecovery, hpMax - hpCurrent);
+        hpCurrent = Math.min(hpMax, hpCurrent + actualRecovery);
         
-        return totalRecovery;
+        return actualRecovery;
     }
     
     /**

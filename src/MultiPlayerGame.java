@@ -475,6 +475,15 @@ public class MultiPlayerGame {
             int powerBonus = main.RandomUtils.getRandomInt(15, 25);
             soloPlayer.setPower(soloPlayer.getPower() + powerBonus);
             
+            // PVP胜利者回血：至少回到80%
+            int currentHp = soloPlayer.getStats().getHpCurrent();
+            int maxHp = soloPlayer.getStats().getHpMax();
+            int targetHp = (int)(maxHp * 0.8);
+            if (currentHp < targetHp) {
+                soloPlayer.getStats().setHpCurrent(targetHp);
+                io.printMessage("恢复生命值至 " + targetHp + "/" + maxHp);
+            }
+            
             io.printMessage("获得奖励：" + rewardPoints + " 点属性 + " + powerBonus + " 战力");
             soloPlayer.incrementRound();
             
@@ -874,6 +883,15 @@ public class MultiPlayerGame {
             // PvP额外战力奖励
             int powerBonus = main.RandomUtils.getRandomInt(15, 25);
             winner.setPower(winner.getPower() + powerBonus);
+            
+            // PVP胜利者回血：至少回到80%
+            int currentHp = winner.getStats().getHpCurrent();
+            int maxHp = winner.getStats().getHpMax();
+            int targetHp = (int)(maxHp * 0.8);
+            if (currentHp < targetHp) {
+                winner.getStats().setHpCurrent(targetHp);
+                winnerIO.printMessage("恢复生命值至 " + targetHp + "/" + maxHp);
+            }
             
             winnerIO.printMessage("获得奖励：" + rewardPoints + " 点属性 + " + powerBonus + " 战力");
             winner.incrementRound();

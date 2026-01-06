@@ -254,6 +254,28 @@ public class Game {
                 continue;
             }
 
+            // 先验证属性名是否有效
+            boolean validAttr = false;
+            switch (input) {
+                case "str":
+                case "agi":
+                case "con":
+                case "int":
+                case "intel":
+                case "luk":
+                case "def":
+                    validAttr = true;
+                    break;
+                default:
+                    consoleIO.println("无效的属性名，请输入 str/agi/con/int/luk/def 之一。");
+                    break;
+            }
+            
+            if (!validAttr) {
+                continue; // 属性名无效，重新开始循环
+            }
+
+            // 属性名有效，再询问点数
             consoleIO.println("要增加多少点？(1-" + remainingPoints + "，回车默认 1)");
             String ptsInput = consoleIO.readLine().trim();
             int pointsToAdd = 1;
@@ -268,6 +290,7 @@ public class Game {
             if (pointsToAdd < 1) pointsToAdd = 1;
             if (pointsToAdd > remainingPoints) pointsToAdd = remainingPoints;
 
+            // 应用加点
             switch (input) {
                 case "str":
                     str += pointsToAdd;
@@ -288,9 +311,6 @@ public class Game {
                 case "def":
                     def += pointsToAdd;
                     break;
-                default:
-                    consoleIO.println("无效的属性名，请输入 str/agi/con/int/luk/def 之一。");
-                    continue;
             }
 
             remainingPoints -= pointsToAdd;

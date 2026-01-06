@@ -155,9 +155,20 @@ public abstract class CharacterBase implements Serializable {
         int attack = calcAttack();
         int defense = target.getStats().getDef();
         
+        // 计算攻防比例，用于平衡伤害
+        double attackDefenseRatio = (double)attack / Math.max(1, defense);
+        
         // 防御力提供更强的减伤（防御值 * 2）
         int reducedAttack = Math.max(1, attack - (defense * 2));
         int baseDamage = reducedAttack / 2; // 基础伤害减半
+        
+        // 限制攻防比例带来的伤害差距（防止差距过大）
+        // 如果攻防比例超过3:1，逐渐降低伤害增长
+        if (attackDefenseRatio > 3.0) {
+            double excessRatio = attackDefenseRatio - 3.0;
+            double dampingFactor = 1.0 / (1.0 + excessRatio * 0.15); // 衰减因子
+            baseDamage = (int)(baseDamage * dampingFactor);
+        }
         
         // 计算是否暴击
         int critRate = calcCritRate();
@@ -182,7 +193,10 @@ public abstract class CharacterBase implements Serializable {
         // 限制单次伤害不超过目标35%最大血量（防止瞬秒）
         int maxDamage = (int)(target.getStats().getHpMax() * 0.35);
         finalDamage = Math.min(finalDamage, maxDamage);
-        finalDamage = Math.max(1, finalDamage); // 至少造成1点伤害
+        
+        // 确保至少造成一定伤害（即使防御很高）
+        int minDamage = Math.max(1, target.getStats().getHpMax() / 50); // 至少是最大血量的2%
+        finalDamage = Math.max(minDamage, finalDamage);
         
         // 应用伤害
         target.takeDamage(finalDamage);
@@ -210,9 +224,20 @@ public abstract class CharacterBase implements Serializable {
         int attack = attacker.calcAttack();
         int defense = this.getStats().getDef();
         
+        // 计算攻防比例，用于平衡伤害
+        double attackDefenseRatio = (double)attack / Math.max(1, defense);
+        
         // 防御力提供更强的减伤（防御值 * 2）
         int reducedAttack = Math.max(1, attack - (defense * 2));
         int baseDamage = reducedAttack / 2; // 基础伤害减半
+        
+        // 限制攻防比例带来的伤害差距（防止差距过大）
+        // 如果攻防比例超过3:1，逐渐降低伤害增长
+        if (attackDefenseRatio > 3.0) {
+            double excessRatio = attackDefenseRatio - 3.0;
+            double dampingFactor = 1.0 / (1.0 + excessRatio * 0.15); // 衰减因子
+            baseDamage = (int)(baseDamage * dampingFactor);
+        }
         
         // 计算是否暴击
         int critRate = attacker.calcCritRate();
@@ -237,7 +262,10 @@ public abstract class CharacterBase implements Serializable {
         // 限制单次伤害不超过目标35%最大血量（防止瞬秒）
         int maxDamage = (int)(this.getStats().getHpMax() * 0.35);
         finalDamage = Math.min(finalDamage, maxDamage);
-        finalDamage = Math.max(1, finalDamage); // 至少造成1点伤害
+        
+        // 确保至少造成一定伤害（即使防御很高）
+        int minDamage = Math.max(1, this.getStats().getHpMax() / 50); // 至少是最大血量的2%
+        finalDamage = Math.max(minDamage, finalDamage);
         
         return finalDamage;
     }
