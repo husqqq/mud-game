@@ -27,6 +27,7 @@ public class GameServer {
     private String host;
     private int port;
     private int expectedPlayerCount;  // 期望的玩家数量
+    private int maxRounds;  // 游戏回合数
     private final UserAuthService authService;
     private final SaveLoadService saveLoadService;
     private final Map<String, ClientHandler> clientHandlers;  // 用户名 -> ClientHandler
@@ -40,6 +41,7 @@ public class GameServer {
         this.host = host != null ? host : DEFAULT_HOST;
         this.port = port;
         this.expectedPlayerCount = expectedPlayerCount;
+        this.maxRounds = 100;  // 默认100回合
         this.authService = new UserAuthService();
         this.saveLoadService = new SaveLoadService();
         this.clientHandlers = new ConcurrentHashMap<>();
@@ -197,6 +199,34 @@ public class GameServer {
             }
         }
     }
+    
+    /**
+     * 询问并设置游戏回合数
+     */
+    private void setupMaxRounds() {
+        java.util.Scanner scanner = new java.util.Scanner(System.in);
+        while (true) {
+            try {
+                System.out.print("请输入游戏回合数 (50-500，默认100): ");
+                String input = scanner.nextLine().trim();
+                if (input.isEmpty()) {
+                    this.maxRounds = 100;
+                    System.out.println("使用默认回合数: 100");
+                    break;
+                }
+                int rounds = Integer.parseInt(input);
+                if (rounds >= 50 && rounds <= 500) {
+                    this.maxRounds = rounds;
+                    System.out.println("设置游戏回合数为: " + rounds);
+                    break;
+                } else {
+                    System.out.println("回合数必须在50-500之间，请重新输入。");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("输入无效，请输入一个数字。");
+            }
+        }
+    }
 
     /**
      * 初始化游戏
@@ -204,10 +234,14 @@ public class GameServer {
     private void initializeGame() {
         // 首先询问期望的玩家数量
         setupExpectedPlayerCount();
+        
+        // 询问游戏回合数
+        setupMaxRounds();
 
         // 创建MultiPlayerGame实例（网络模式，不需要加载存档）
-        this.game = new MultiPlayerGame();
+        this.game = new MultiPlayerGame(new java.util.HashMap<>(), maxRounds);
         System.out.println("游戏已初始化，等待 " + expectedPlayerCount + " 个玩家连接...");
+        System.out.println("游戏设置：" + maxRounds + " 回合");
     }
     
     /**

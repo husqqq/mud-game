@@ -8,7 +8,7 @@ import java.util.concurrent.*;
  * 多玩家游戏主控制类
  */
 public class MultiPlayerGame {
-    private static final int MAX_ROUNDS = 100;
+    private final int maxRounds;  // 改为可配置的实例变量
     
     private final MultiPlayerManager playerManager;
     private final TrainingService trainingService;
@@ -26,17 +26,18 @@ public class MultiPlayerGame {
     private final Object participantsLock = new Object();  // 用于同步决斗池参与者列表的修改
     
     public MultiPlayerGame() {
-        this(new HashMap<>());
+        this(new HashMap<>(), 100);  // 默认100回合
     }
     
-    public MultiPlayerGame(Map<String, GameIO> playerIOs) {
+    public MultiPlayerGame(Map<String, GameIO> playerIOs, int maxRounds) {
+        this.maxRounds = maxRounds;
         this.playerIOs = playerIOs != null ? new ConcurrentHashMap<>(playerIOs) : new ConcurrentHashMap<>();
         this.defaultIO = new ConsoleIO();  // 默认使用本地ConsoleIO
         this.saveLoadService = new SaveLoadService();
         this.trainingService = new TrainingService(defaultIO);
         this.battleService = new BattleService();
         this.npcFactory = new NpcFactory();
-        this.playerManager = new MultiPlayerManager(MAX_ROUNDS);
+        this.playerManager = new MultiPlayerManager(maxRounds);
         this.pvpBattleService = new PvPBattleService(playerManager);
         this.playerReadyMap = new ConcurrentHashMap<>();
         // BattleService和TrainingService会在每次使用时传入玩家的IO
@@ -71,7 +72,7 @@ public class MultiPlayerGame {
 
         defaultIO.printMessage("欢迎来到多人在线武侠世界！");
         defaultIO.printMessage("当前玩家数量: " + playerManager.getPlayerCount());
-        defaultIO.printMessage("最大回合数: " + MAX_ROUNDS);
+        defaultIO.printMessage("最大回合数: " + maxRounds);
 
         // 进入主循环
         mainLoop();
@@ -84,7 +85,7 @@ public class MultiPlayerGame {
         gameStarted = true;
         defaultIO.printMessage("欢迎来到多人在线武侠世界！");
         defaultIO.printMessage("当前玩家数量: " + playerManager.getPlayerCount());
-        defaultIO.printMessage("最大回合数: " + MAX_ROUNDS);
+        defaultIO.printMessage("最大回合数: " + maxRounds);
 
         // 进入主循环
         mainLoop();
@@ -235,7 +236,7 @@ public class MultiPlayerGame {
             }
             
             io.printMessage("\n===== " + player.getName() + " 的回合 =====");
-            io.printMessage("当前回合数: " + (playerManager.getCurrentRound() + 1) + "/" + MAX_ROUNDS);
+            io.printMessage("当前回合数: " + (playerManager.getCurrentRound() + 1) + "/" + maxRounds);
             
             boolean turnComplete = false;
             while (!turnComplete && isRunning && !playerManager.isGameEnded()) {
@@ -1232,13 +1233,13 @@ public class MultiPlayerGame {
         int currentRound = playerManager.getCurrentRound();
         
         // 检查是否达到最大回合数
-        if (currentRound >= MAX_ROUNDS) {
+        if (currentRound >= maxRounds) {
             playerManager.setGameEnded(true);
             // 向所有玩家广播
             for (Player player : playerManager.getAllPlayers()) {
                 GameIO io = getPlayerIO(player.getName());
                 io.printMessage("\n====================================");
-                io.printMessage("已达到最大回合数 " + MAX_ROUNDS + "，游戏结束！");
+                io.printMessage("已达到最大回合数 " + maxRounds + "，游戏结束！");
                 io.printMessage("====================================");
             }
         }

@@ -14,6 +14,8 @@ public class Game {
     private final NpcFactory npcFactory;
     private Player player;
     private boolean isRunning;
+    private int maxRounds;  // 游戏回合数
+    private int targetPower;  // 目标战力
 
     public Game() {
         this.consoleIO = new ConsoleIO();
@@ -21,7 +23,9 @@ public class Game {
         this.trainingService = new TrainingService(consoleIO);
         this.battleService = new BattleService(consoleIO);
         this.npcFactory = new NpcFactory();
-        this.pvpBattleService = new PvPBattleService(new MultiPlayerManager(100), consoleIO);
+        this.maxRounds = 100;  // 默认100回合
+        this.targetPower = 1200;  // 默认目标1200战力
+        this.pvpBattleService = new PvPBattleService(new MultiPlayerManager(maxRounds), consoleIO);
         this.isRunning = true;
     }
 
@@ -30,6 +34,9 @@ public class Game {
      */
     public void start() {
         consoleIO.printWelcomeMessage();
+        
+        // 询问游戏设置
+        setupGameParameters();
 
         // 创建或加载角色
         player = createOrLoadPlayer();
@@ -40,12 +47,67 @@ public class Game {
         }
 
         consoleIO.printMessage("欢迎来到武侠世界，" + player.getName() + "！");
-        consoleIO.printMessage("游戏目标：在 100 回合内战力达到 1200 分，最终成为武林至尊！");
-        consoleIO.printMessage("当前回合: " + player.getRoundCount() + "/100");
+        consoleIO.printMessage("游戏目标：在 " + maxRounds + " 回合内战力达到 " + targetPower + " 分，最终成为武林至尊！");
+        consoleIO.printMessage("当前回合: " + player.getRoundCount() + "/" + maxRounds);
         consoleIO.waitForEnter();
 
         // 进入主循环
         mainLoop();
+    }
+    
+    /**
+     * 设置游戏参数
+     */
+    private void setupGameParameters() {
+        consoleIO.printTitle("游戏设置");
+        
+        // 设置回合数
+        while (true) {
+            try {
+                consoleIO.print("请输入游戏回合数 (50-500，默认100): ");
+                String input = consoleIO.readLine().trim();
+                if (input.isEmpty()) {
+                    maxRounds = 100;
+                    consoleIO.printMessage("使用默认回合数: 100");
+                    break;
+                }
+                int rounds = Integer.parseInt(input);
+                if (rounds >= 50 && rounds <= 500) {
+                    maxRounds = rounds;
+                    consoleIO.printMessage("设置游戏回合数为: " + rounds);
+                    break;
+                } else {
+                    consoleIO.printErrorMessage("回合数必须在50-500之间，请重新输入。");
+                }
+            } catch (NumberFormatException e) {
+                consoleIO.printErrorMessage("输入无效，请输入一个数字。");
+            }
+        }
+        
+        // 设置目标战力
+        while (true) {
+            try {
+                consoleIO.print("请输入目标战力 (500-3000，默认1200): ");
+                String input = consoleIO.readLine().trim();
+                if (input.isEmpty()) {
+                    targetPower = 1200;
+                    consoleIO.printMessage("使用默认目标战力: 1200");
+                    break;
+                }
+                int power = Integer.parseInt(input);
+                if (power >= 500 && power <= 3000) {
+                    targetPower = power;
+                    consoleIO.printMessage("设置目标战力为: " + power);
+                    break;
+                } else {
+                    consoleIO.printErrorMessage("目标战力必须在500-3000之间，请重新输入。");
+                }
+            } catch (NumberFormatException e) {
+                consoleIO.printErrorMessage("输入无效，请输入一个数字。");
+            }
+        }
+        
+        consoleIO.println("");
     }
 
     /**
@@ -257,13 +319,13 @@ public class Game {
     private void mainLoop() {
         while (isRunning && player.getStats().isAlive()) {
             // 检查胜利/失败条件
-            if (player.getRoundCount() >= 100) {
+            if (player.getRoundCount() >= maxRounds) {
                 consoleIO.printSeparator();
-                if (player.getPower() >= 1200) {
-                    consoleIO.println("恭喜你！在 100 回合内达到了 " + player.getPower() + " 战力，达成了武林至尊目标！");
+                if (player.getPower() >= targetPower) {
+                    consoleIO.println("恭喜你！在 " + maxRounds + " 回合内达到了 " + player.getPower() + " 战力，达成了武林至尊目标！");
                     consoleIO.println("你赢得了游戏的最终胜利！");
                 } else {
-                    consoleIO.println("游戏结束：你已达到 100 回合，但战力仅为 " + player.getPower() + "，未能达到 1200 分。");
+                    consoleIO.println("游戏结束：你已达到 " + maxRounds + " 回合，但战力仅为 " + player.getPower() + "，未能达到 " + targetPower + " 分。");
                     consoleIO.println("再接再厉，下次更强！");
                 }
                 consoleIO.printSeparator();
